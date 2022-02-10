@@ -1,14 +1,342 @@
+#define __CL_ENABLE_EXCEPTIONS
+#if defined(__APPLE__) || defined(__MACOSX)
+#include <OpenCL/cl.h>
+#else
+#include <CL/cl.h>
+#endif
+
 #include <stdlib.h>
+#include <stdio.h>
 #define _USE_MATH_DEFINES
 #include <math.h>
 
 #include "math.h"
-#include "mat.h"
-// Hardware acceleration.
-// The functions ARE NOT AVAILABLE IF __CUDACC__ IS NOT DEFINED AT COMPILE TIME
-#include "../hware/mathhw.h"
-#include "../hware/mathw.h"
 
+#define noerr(e) { if ((e)) { puts("MATH_H: Initialized math UNSUCCESSFULY."); return e; } }
+
+cl_platform_id cpPlatform;        // OpenCL platform
+cl_device_id device_id;           // device ID
+cl_context context;               // context
+cl_command_queue queue;           // command queue
+
+// Programs
+cl_program matprog;
+cl_program mathprog;
+
+// Kernels
+cl_kernel kmatmul;
+cl_kernel kmatadd;
+cl_kernel kmatsub;
+cl_kernel kmatmuls;
+cl_kernel kmatadds;
+
+int mainit() {
+    int err;
+    
+    /* Init matrix lib */
+    err = clGetPlatformIDs(1, &cpPlatform, NULL);
+    noerr(err);
+    // TODO: If no GPU, use CPU
+    err = clGetDeviceIDs(cpPlatform, CL_DEVICE_TYPE_GPU, 1, &device_id, NULL);
+    noerr(err);
+    context = clCreateContext(0, 1, &device_id, NULL, NULL, &err);
+    noerr(err);
+    queue = clCreateCommandQueue(context, device_id, 0, &err);
+    noerr(err);
+    
+    // Get the compute matprog from the source code
+    char *matSource = read_file_content_path(MAT_PROG);
+    matprog = clCreateProgramWithSource(context, 1, (const char **) &matSource, NULL, &err);
+    free(matSource);
+    noerr(err);
+    char *mathSource = read_file_content_path(MATH_PROG);
+    mathprog = clCreateProgramWithSource(context, 1, (const char **) &mathSource, NULL, &err);
+    free(mathSource);
+    noerr(err);
+    // TODO: In debug mode, print if CL_BUILD_ERROR
+    err = clBuildProgram(matprog, 0, NULL, NULL, NULL, NULL);
+    noerr(err);
+    err = clBuildProgram(mathprog, 0, NULL, NULL, NULL, NULL);
+    noerr(err);
+    
+    /* Make all kernels */
+    kmatmul = clCreateKernel(matprog, "matmul", &err);
+    noerr(err);
+    kmatadd = clCreateKernel(matprog, "matadd", &err);
+    noerr(err);
+    kmatsub = clCreateKernel(matprog, "matsub", &err);
+    noerr(err);
+    kmatmuls = clCreateKernel(matprog, "matmuls", &err);
+    noerr(err);
+    kmatadds = clCreateKernel(matprog, "matadds", &err);
+    noerr(err);
+    
+    if (chkset(setts, DB))
+        puts("MATH_H: Initialized math successfuly.");
+    
+    return MNO_ERR;
+}
+
+int macln() {
+    clReleaseProgram(matprog);
+    clReleaseKernel(kmatmul);
+    clReleaseKernel(kmatadd);
+    clReleaseKernel(kmatsub);
+    clReleaseKernel(kmatmuls);
+    clReleaseKernel(kmatadds);
+    clReleaseCommandQueue(queue);
+    clReleaseContext(context);
+    
+    return MNO_ERR;
+}
+
+int matmul(double *a, double *b, unsigned int aw, unsigned int ah,
+           unsigned int bw, unsigned int bh, double **res) {
+    unsigned int k, az, bz;
+    
+    if (aw == bh) {
+        k = aw;
+        az = ah;
+        bz = bw;
+    } else if (ah == bw) {
+        k = ah;
+        az = aw;
+        bz = bh;
+    } else {
+        return MINVALID_ARG;
+    }
+    
+    double *h_r = (double *) malloc(sizeof(double) * az * bz);
+    
+    int err;
+    
+    // Prepare the data in the device
+    cl_mem d_a = clCreateBuffer(context, CL_MEM_READ_ONLY, sizeof(double) * aw * ah, NULL, NULL);
+    cl_mem d_b = clCreateBuffer(context, CL_MEM_READ_ONLY, sizeof(double) * bw * bh, NULL, NULL);
+    cl_mem d_r = clCreateBuffer(context, CL_MEM_WRITE_ONLY, sizeof(double) * az * bz, NULL, NULL);
+    
+    // Copy the data to the device
+    err = clEnqueueWriteBuffer(queue, d_a, CL_TRUE, 0, sizeof(double) * aw * ah, a, 0, NULL, NULL);
+    err |= clEnqueueWriteBuffer(queue, d_b, CL_TRUE, 0, sizeof(double) * bw * bh, b, 0, NULL, NULL);
+    noerr(err);
+    
+    // Set the kernel args
+    err  = clSetKernelArg(kmatmul, 0, sizeof(cl_mem), &d_a);
+    err |= clSetKernelArg(kmatmul, 1, sizeof(cl_mem), &d_b);
+    err |= clSetKernelArg(kmatmul, 2, sizeof(unsigned int), &bz);
+    err |= clSetKernelArg(kmatmul, 3, sizeof(unsigned int), &az);
+    err |= clSetKernelArg(kmatmul, 4, sizeof(unsigned int), &k);
+    err |= clSetKernelArg(kmatmul, 5, sizeof(cl_mem), &d_r);
+    noerr(err);
+    
+    // Number of total work items - localSize must be devisor
+    size_t globalSize[3] = { az, bz, 0 };
+    
+    // Execute kernel
+    err = clEnqueueNDRangeKernel(queue, kmatmul, 2, NULL, globalSize, NULL, 0, NULL, NULL);
+    noerr(err);
+    
+    // Wait for the command queue to get serviced before reading back results
+    clFinish(queue);
+    
+    // Copy results back
+    clEnqueueReadBuffer(queue, d_r, CL_TRUE, 0, sizeof(double) * az * bz, h_r, 0, NULL, NULL );
+    
+    // Free
+    clReleaseMemObject(d_a);
+    clReleaseMemObject(d_b);
+    clReleaseMemObject(d_r);
+    
+    *res = h_r;
+    
+    return MNO_ERR;
+}
+
+int matadd(double *a, double *b, unsigned int aw, unsigned int ah, 
+           unsigned int bw, unsigned int bh, double **res) {
+    if (aw != bw || ah != bh) return MINVALID_ARG;
+    
+    double *h_r = (double *) malloc(sizeof(double) * aw * ah);
+    
+    int err;
+    
+    // Prepare the data in the device
+    cl_mem d_a = clCreateBuffer(context, CL_MEM_READ_ONLY, sizeof(double) * aw * ah, NULL, NULL);
+    cl_mem d_b = clCreateBuffer(context, CL_MEM_READ_ONLY, sizeof(double) * bw * bh, NULL, NULL);
+    cl_mem d_r = clCreateBuffer(context, CL_MEM_WRITE_ONLY, sizeof(double) * aw * ah, NULL, NULL);
+    
+    // Copy the data to the device
+    err = clEnqueueWriteBuffer(queue, d_a, CL_TRUE, 0, sizeof(double) * aw * ah, a, 0, NULL, NULL);
+    err |= clEnqueueWriteBuffer(queue, d_b, CL_TRUE, 0, sizeof(double) * bw * bh, b, 0, NULL, NULL);
+    noerr(err);
+    
+    // Set the kernel args
+    err  = clSetKernelArg(kmatadd, 0, sizeof(cl_mem), &d_a);
+    err |= clSetKernelArg(kmatadd, 1, sizeof(cl_mem), &d_b);
+    err |= clSetKernelArg(kmatadd, 2, sizeof(unsigned int), &aw);
+    err |= clSetKernelArg(kmatadd, 3, sizeof(unsigned int), &ah);
+    err |= clSetKernelArg(kmatadd, 4, sizeof(cl_mem), &d_r);
+    noerr(err);
+    
+    // Number of total work items - localSize must be devisor
+    size_t globalSize[3] = { aw, ah, 0 };
+    
+    // Execute kernel
+    err = clEnqueueNDRangeKernel(queue, kmatadd, 2, NULL, globalSize, NULL, 0, NULL, NULL);
+    noerr(err);
+    
+    // Wait for the command queue to get serviced before reading back results
+    clFinish(queue);
+    
+    // Copy results back
+    clEnqueueReadBuffer(queue, d_r, CL_TRUE, 0, sizeof(double) * aw * ah, h_r, 0, NULL, NULL );
+    
+    // Free
+    clReleaseMemObject(d_a);
+    clReleaseMemObject(d_b);
+    clReleaseMemObject(d_r);
+    
+    *res = h_r;
+    
+    return MNO_ERR;
+}
+
+int matsub(double *a, double *b, unsigned int aw, unsigned int ah, 
+           unsigned int bw, unsigned int bh, double **res) {
+    if (aw != bw || ah != bh) return MINVALID_ARG;
+    
+    double *h_r = (double *) malloc(sizeof(double) * aw * ah);
+    
+    int err;
+    
+    // Prepare the data in the device
+    cl_mem d_a = clCreateBuffer(context, CL_MEM_READ_ONLY, sizeof(double) * aw * ah, NULL, NULL);
+    cl_mem d_b = clCreateBuffer(context, CL_MEM_READ_ONLY, sizeof(double) * bw * bh, NULL, NULL);
+    cl_mem d_r = clCreateBuffer(context, CL_MEM_WRITE_ONLY, sizeof(double) * aw * ah, NULL, NULL);
+    
+    // Copy the data to the device
+    err = clEnqueueWriteBuffer(queue, d_a, CL_TRUE, 0, sizeof(double) * aw * ah, a, 0, NULL, NULL);
+    err |= clEnqueueWriteBuffer(queue, d_b, CL_TRUE, 0, sizeof(double) * bw * bh, b, 0, NULL, NULL);
+    noerr(err);
+    
+    // Set the kernel args
+    err  = clSetKernelArg(kmatsub, 0, sizeof(cl_mem), &d_a);
+    err |= clSetKernelArg(kmatsub, 1, sizeof(cl_mem), &d_b);
+    err |= clSetKernelArg(kmatsub, 2, sizeof(unsigned int), &aw);
+    err |= clSetKernelArg(kmatsub, 3, sizeof(unsigned int), &ah);
+    err |= clSetKernelArg(kmatsub, 4, sizeof(cl_mem), &d_r);
+    noerr(err);
+    
+    // Number of total work items - localSize must be devisor
+    size_t globalSize[3] = { aw, ah, 0 };
+    
+    // Execute kernel
+    err = clEnqueueNDRangeKernel(queue, kmatsub, 2, NULL, globalSize, NULL, 0, NULL, NULL);
+    noerr(err);
+    
+    // Wait for the command queue to get serviced before reading back results
+    clFinish(queue);
+    
+    // Copy results back
+    clEnqueueReadBuffer(queue, d_r, CL_TRUE, 0, sizeof(double) * aw * ah, h_r, 0, NULL, NULL );
+    
+    // Free
+    clReleaseMemObject(d_a);
+    clReleaseMemObject(d_b);
+    clReleaseMemObject(d_r);
+    
+    *res = h_r;
+    
+    return MNO_ERR;
+}
+
+int matmuls(double *a, double b, unsigned int aw, unsigned int ah, double **res) {
+    // assert(a != *res)
+    double *h_r = (double *) malloc(sizeof(double) * aw * ah);
+    
+    int err;
+    
+    // Prepare the data in the device
+    cl_mem d_a = clCreateBuffer(context, CL_MEM_READ_ONLY, sizeof(double) * aw * ah, NULL, NULL);
+    cl_mem d_r = clCreateBuffer(context, CL_MEM_WRITE_ONLY, sizeof(double) * aw * ah, NULL, NULL);
+    
+    // Copy the data to the device
+    err = clEnqueueWriteBuffer(queue, d_a, CL_TRUE, 0, sizeof(double) * aw * ah, a, 0, NULL, NULL);
+    noerr(err);
+    
+    // Set the kernel args
+    err  = clSetKernelArg(kmatmuls, 0, sizeof(cl_mem), &d_a);
+    err |= clSetKernelArg(kmatmuls, 0, sizeof(double), &b);
+    err |= clSetKernelArg(kmatmuls, 2, sizeof(unsigned int), &aw);
+    err |= clSetKernelArg(kmatmuls, 3, sizeof(unsigned int), &ah);
+    err |= clSetKernelArg(kmatmuls, 4, sizeof(cl_mem), &d_r);
+    noerr(err);
+    
+    // Number of total work items - localSize must be devisor
+    size_t globalSize[3] = { aw, ah, 0 };
+    
+    // Execute kernel
+    err = clEnqueueNDRangeKernel(queue, kmatmuls, 2, NULL, globalSize, NULL, 0, NULL, NULL);
+    noerr(err);
+    
+    // Wait for the command queue to get serviced before reading back results
+    clFinish(queue);
+    
+    // Copy results back
+    clEnqueueReadBuffer(queue, d_r, CL_TRUE, 0, sizeof(double) * aw * ah, h_r, 0, NULL, NULL );
+    
+    // Free
+    clReleaseMemObject(d_a);
+    clReleaseMemObject(d_r);
+    
+    *res = h_r;
+    
+    return MNO_ERR;
+}
+
+int matadds(double *a, double b, unsigned int aw, unsigned int ah, double **res) {
+    // assert(a != *res)
+    double *h_r = (double *) malloc(sizeof(double) * aw * ah);
+    
+    int err;
+    
+    // Prepare the data in the device
+    cl_mem d_a = clCreateBuffer(context, CL_MEM_READ_ONLY, sizeof(double) * aw * ah, NULL, NULL);
+    cl_mem d_r = clCreateBuffer(context, CL_MEM_WRITE_ONLY, sizeof(double) * aw * ah, NULL, NULL);
+    
+    // Copy the data to the device
+    err = clEnqueueWriteBuffer(queue, d_a, CL_TRUE, 0, sizeof(double) * aw * ah, a, 0, NULL, NULL);
+    noerr(err);
+    
+    // Set the kernel args
+    err  = clSetKernelArg(kmatadds, 0, sizeof(cl_mem), &d_a);
+    err |= clSetKernelArg(kmatadds, 0, sizeof(double), &b);
+    err |= clSetKernelArg(kmatadds, 2, sizeof(unsigned int), &aw);
+    err |= clSetKernelArg(kmatadds, 3, sizeof(unsigned int), &ah);
+    err |= clSetKernelArg(kmatadds, 4, sizeof(cl_mem), &d_r);
+    noerr(err);
+    
+    // Number of total work items - localSize must be devisor
+    size_t globalSize[3] = { aw, ah, 0 };
+    
+    // Execute kernel
+    err = clEnqueueNDRangeKernel(queue, kmatadds, 2, NULL, globalSize, NULL, 0, NULL, NULL);
+    noerr(err);
+    
+    // Wait for the command queue to get serviced before reading back results
+    clFinish(queue);
+    
+    // Copy results back
+    clEnqueueReadBuffer(queue, d_r, CL_TRUE, 0, sizeof(double) * aw * ah, h_r, 0, NULL, NULL );
+    
+    // Free
+    clReleaseMemObject(d_a);
+    clReleaseMemObject(d_r);
+    
+    *res = h_r;
+    
+    return MNO_ERR;
+}
 
 double hann(int x, int windowsize) {
     /* Hann window function to be used as windowing function for stft */
@@ -210,39 +538,4 @@ int melspec(double *src, int sz, int framesize, int windowsize, int hopsize, int
     free(fban);
     
     return MNO_ERR;
-}
-
-int matmul(Mat a, Mat b, Mat *res) {
-#ifdef __CUDACC__
-    // GPU Implementation
-    return amatmul(a, b, res);
-#else
-    // CPU Implementation
-	
-    int commonsz;
-    
-	if (a.width == b.height) {
-        commonsz = a.width;
-        res->width = b.width;
-        res->height = a.height;
-    } else if (a.height == b.width) {
-        commonsz = a.height;
-        res->width = a.width;
-        res->height = b.height;
-    } else {
-        return TSIZE_MISMATCH;
-    }
-    
-    for (int i = 0; i < res->height; i++) {
-        for (int j = 0; j < res->width; j++) {
-            double sum = 0.0;
-            for (int k = 0; k < commonsz; k++) 
-                sum += a.data[k + i * a.width] * b.data[j + k * b.width];
-            
-            res->data[j + i * res->width] = sum;
-        }
-    }
-    
-    return TNO_ERR;
-#endif
 }
