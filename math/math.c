@@ -11,6 +11,7 @@
 #include <math.h>
 
 #include "math.h"
+#include "../io/args.h"
 
 #define noerr(e) { if ((e)) { puts("MATH_H: Initialized math UNSUCCESSFULY."); return e; } }
 
@@ -45,14 +46,17 @@ int mainit() {
     noerr(err);
     
     // Get the compute matprog from the source code
-    char *matSource = read_file_content_path(MAT_PROG);
+    char *matSource = ldfile("B:\\My Stuff\\C Code\\cnntts\\io\\test.txt");
+    printf("src:\n%s", matSource);
+    fflush(stdout);
     matprog = clCreateProgramWithSource(context, 1, (const char **) &matSource, NULL, &err);
     free(matSource);
     noerr(err);
-    char *mathSource = read_file_content_path(MATH_PROG);
+    char *mathSource = ldfile(MATH_PROG);
     mathprog = clCreateProgramWithSource(context, 1, (const char **) &mathSource, NULL, &err);
     free(mathSource);
     noerr(err);
+    return 0;
     // TODO: In debug mode, print if CL_BUILD_ERROR
     err = clBuildProgram(matprog, 0, NULL, NULL, NULL, NULL);
     noerr(err);
@@ -71,7 +75,7 @@ int mainit() {
     kmatadds = clCreateKernel(matprog, "matadds", &err);
     noerr(err);
     
-    if (chkset(setts, DB))
+    if (chkset(sets, DB))
         puts("MATH_H: Initialized math successfuly.");
     
     return MNO_ERR;
@@ -79,11 +83,13 @@ int mainit() {
 
 int macln() {
     clReleaseProgram(matprog);
+    clReleaseProgram(mathprog);
     clReleaseKernel(kmatmul);
     clReleaseKernel(kmatadd);
     clReleaseKernel(kmatsub);
     clReleaseKernel(kmatmuls);
     clReleaseKernel(kmatadds);
+    
     clReleaseCommandQueue(queue);
     clReleaseContext(context);
     
@@ -266,7 +272,7 @@ int matmuls(double *a, double b, unsigned int aw, unsigned int ah, double **res)
     
     // Set the kernel args
     err  = clSetKernelArg(kmatmuls, 0, sizeof(cl_mem), &d_a);
-    err |= clSetKernelArg(kmatmuls, 0, sizeof(double), &b);
+    err |= clSetKernelArg(kmatmuls, 1, sizeof(double), &b);
     err |= clSetKernelArg(kmatmuls, 2, sizeof(unsigned int), &aw);
     err |= clSetKernelArg(kmatmuls, 3, sizeof(unsigned int), &ah);
     err |= clSetKernelArg(kmatmuls, 4, sizeof(cl_mem), &d_r);
@@ -310,7 +316,7 @@ int matadds(double *a, double b, unsigned int aw, unsigned int ah, double **res)
     
     // Set the kernel args
     err  = clSetKernelArg(kmatadds, 0, sizeof(cl_mem), &d_a);
-    err |= clSetKernelArg(kmatadds, 0, sizeof(double), &b);
+    err |= clSetKernelArg(kmatadds, 1, sizeof(double), &b);
     err |= clSetKernelArg(kmatadds, 2, sizeof(unsigned int), &aw);
     err |= clSetKernelArg(kmatadds, 3, sizeof(unsigned int), &ah);
     err |= clSetKernelArg(kmatadds, 4, sizeof(cl_mem), &d_r);
@@ -458,12 +464,12 @@ int melspec(double *src, int sz, int framesize, int windowsize, int hopsize, int
             double fstart, double fend, double **res) {
     int e = 0;
     
-    /* Extract STFT */
-    
-	int fbins, frames;
+    int fbins, frames;
 	stftwh(sz, framesize, hopsize, &fbins, &frames);
     
     if (fend == 0.0) fend = fbins;
+    
+    /* Extract STFT */
     
     double *ft = (double *) malloc(fbins * frames * sizeof(double));
     if ((e = stft(src, sz, framesize, windowsize, hopsize, hann, &ft, fbins * frames, MAGSQ)))
@@ -521,17 +527,9 @@ int melspec(double *src, int sz, int framesize, int windowsize, int hopsize, int
     
     /* Apply filter bank to signal */
     
-    Mat a, b, r;
-    a.width = fbins;
-    a.height = frames;
-    b.width = fbins;
-    b.height = bands;
-    
-    matmul(a, b, &r);
+    matmul(fban, ft, fbins, frames, fbins, bands, res);
     
     /* Cleanup */
-    
-    *res = r.data;
     
     free(ft);
     free(filters);

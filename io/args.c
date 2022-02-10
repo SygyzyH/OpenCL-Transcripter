@@ -65,3 +65,21 @@ int hndl_set(int argc, char *argv[]) {
     
     return res;
 }
+
+char* ldfile(char const *filepath) {
+    FILE *file = fopen(filepath, "r");
+    perror("Failed: ");
+    int file_size;
+    char *text;
+    
+    fseek(file, 0L, SEEK_END);
+    file_size = ftell(file);
+    printf("fp: %s, fs:%d\n", filepath, file_size);
+    rewind(file);
+    text = malloc(file_size + 1);
+    fread(text, 1, file_size, file);
+    text[file_size] = '\0';
+    printf("%s\n", text);
+    fclose(file);
+    return text;
+}

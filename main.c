@@ -3,12 +3,9 @@
 
 #include "io/args.h"
 #include "io/audio.h"
+#include "math/math.h"
 
 int main(int argc, char *argv[]) {
-#ifndef __CUDACC__
-    puts("No CUDA C support in build. Running un-accelerated.");
-#endif
-    
     sets = hndl_set(argc, argv);
     if (chkset(sets, DB))
         // If this occurs, DB must already be set.
@@ -19,10 +16,24 @@ int main(int argc, char *argv[]) {
     // If OK flag is clr, abort.
     if (!chkset(sets, OK)) return 1;
     
-    if (auinit()) return 2;
-    if (austrt()) return 3;
+    int e;
+    /* Init */
+    e = auinit();
+    if (e) return e;
+    e = mainit();
+    if (e) return e;
+    return 0;
+    
+    // Start audio
+    e = austrt();
+    if (e) return e;
+    
     getchar();
-    if (aucln()) return 4;
+    
+    e = aucln();
+    if (e) return e;
+    e = macln();
+    if (e) return e;
     
     if (chkset(sets, DB))
         puts("Gracefully resolved!");

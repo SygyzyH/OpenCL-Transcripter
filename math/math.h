@@ -32,4 +32,7 @@ int matsub(double *a, double *b, unsigned int aw, unsigned int ah, unsigned int 
 int matmuls(double *a, double b, unsigned int aw, unsigned int ah, double **res);
 int matadds(double *a, double b, unsigned int aw, unsigned int ah, double **res);
 
+int mainit();
+int macln();
+
 #endif //MATH_H

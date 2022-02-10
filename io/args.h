@@ -13,5 +13,6 @@ enum SETTINGS { OK, RT, DB, FB, CS, OUT_TXT };
 #define chkset(i, set) i & (1 << set)
 
 int hndl_set(int argc, char *argv[]);
+char* ldfile(char const *filepath);
 
 #endif //IO_H
