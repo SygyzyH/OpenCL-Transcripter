@@ -24,7 +24,7 @@ enum MATH_ERR { MNO_ERR=0, MINVALID_ARG, MZERO_DIV, MSMALL_BUF };
 #define stftwh(sz, framesize, hopsize, w, h) { *w = stftw(framesize); *h = stfth(sz, framesize, hopsize); } 
 
 int amptodb(double **src, int sz, double topdb, int op);
-int stft(double *src, int sz, int framesize, int windowsize, int hopsize, double **res, int szr, int op);
+int stft(double *src, int sz, int framesize, int windowsize, int hopsize, double **res, int op);
 int melspec(double *src, int sz, int framesize, int windowsize, int hopsize, int bands, double fstart, double fend, double **res);
 
 int matmul(double *a, unsigned int aw, unsigned int ah, 

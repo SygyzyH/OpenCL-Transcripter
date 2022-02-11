@@ -171,7 +171,7 @@ int matmul(double *a, unsigned int aw, unsigned int ah,
     err |= clSetKernelArg(kmatmul, 5, sizeof(cl_mem), &d_r);
     noerr(err);
     
-    // Number of total work items - localSize must be devisor
+    // Number of total work items
     size_t globalSize[3] = { az, bz, 0 };
     
     // Execute kernel
@@ -381,68 +381,53 @@ int matadds(double *a, unsigned int aw, unsigned int ah, double b, double **res)
 }
 
 int stft(double *src, int sz, int framesize, int windowsize, int hopsize,
-         double **res, int szr, int op) {
-#ifdef __CUDACC__
-    // GPU Implementation
-    return astft(src, sz, framesize, windowsize, hopsize, res, szr, op);
-#else
-    // CPU Implementation
+         double **res, int op) {
+    int err;
     
     /* NOTE: as to avoid messing with returning complex numbers, the result is either only the complex
-            solutions, only the real solutions, or their magnitude squared. This equates to the wave's amplitude,
-            the waves phase, or the wave's power spectral density. */
+                solutions, only the real solutions, or their magnitude squared. This equates to the wave's amplitude,
+                the waves phase, or the wave's power spectral density. */
     
     if (hopsize == 0) return MZERO_DIV;
     if (framesize == 0) return MZERO_DIV;
     
-    // User should call this to get result size
-	int fbins, frames;
+    int fbins, frames;
 	stftwh(sz, framesize, hopsize, &fbins, &frames);
     
-    if (szr < fbins * frames) return MSMALL_BUF;
-	
-    // This is the part that runs on the GPU on accelerated mode
-	for (int frame = 0; frame < frames; frame++) {
-		for (int freqbi = 0; freqbi < framesize; freqbi++) {
-			int freq = (freqbi < ceil(framesize / 2))? freqbi : freqbi - framesize;
-			
-			double sumr = 0;
-			double sumi = 0;
-            
-            for (int n = 0; n < framesize; n++) {
-                double r = src[n + frame * hopsize]; //* (*w)(n, windowsize);
-                double phi = -2 * M_PI * n * freq / framesize;
-				sumr += r * cos(phi);
-				sumi += r * sin(phi);
-            }
-            
-            // The usuall use case for this is with MAGSQ, but the other
-            // options do exist.
-            double opres;
-            switch (op) {
-                case REAL:
-                opres = sumr;
-                break;
-                
-                case COMPLEX:
-                opres = sumi;
-                break;
-                
-                case MAGSQ:
-                opres = sumr * sumr + sumi * sumi;
-                break;
-                
-                default:
-                return MINVALID_ARG;
-            }
-            
-			if (freqbi < fbins)
-            (*res)[freqbi + frame * fbins] = opres;
-        }
-    }
+    double *h_r = (double *) malloc(sizeof(double) * fbins * frames);
+    
+    cl_mem d_src = clCreateBuffer(context, CL_MEM_READ_ONLY, sizeof(double) * sz, NULL, NULL);
+    cl_mem d_r = clCreateBuffer(context, CL_MEM_WRITE_ONLY, sizeof(double) * fbins * frames, NULL, NULL);
+    
+    err = clEnqueueWriteBuffer(queue, d_src, CL_TRUE, 0, sizeof(double) * sz, src, 0, NULL, NULL);
+    noerr(err);
+    
+    err  = clSetKernelArg(kstft, 0, sizeof(cl_mem), &d_src);
+    err |= clSetKernelArg(kstft, 1, sizeof(int), &framesize);
+    err |= clSetKernelArg(kstft, 2, sizeof(int), &windowsize);
+    err |= clSetKernelArg(kstft, 3, sizeof(int), &hopsize);
+    err |= clSetKernelArg(kstft, 4, sizeof(cl_mem), &d_r);
+    err |= clSetKernelArg(kstft, 5, sizeof(int), &op);
+    noerr(err);
+    
+    size_t globalSize[3] = { frames, fbins, 0 };
+    
+    // Execute kernel
+    err = clEnqueueNDRangeKernel(queue, kstft, 2, NULL, globalSize, NULL, 0, NULL, NULL);
+    noerr(err);
+    
+    clFinish(queue);
+    
+    // Copy results back (blocking, no need to wait)
+    clEnqueueReadBuffer(queue, d_r, CL_TRUE, 0, sizeof(double) * fbins * frames, h_r, 0, NULL, NULL );
+    
+    // Free
+    clReleaseMemObject(d_src);
+    clReleaseMemObject(d_r);
+    
+    *res = h_r;
     
     return MNO_ERR;
-#endif
 }
 
 int amptodb(double **src, int sz, double topdb, int op) {	
@@ -503,8 +488,8 @@ int melspec(double *src, int sz, int framesize, int windowsize, int hopsize, int
     
     /* Extract STFT */
     
-    double *ft = (double *) malloc(fbins * frames * sizeof(double));
-    if ((e = stft(src, sz, framesize, windowsize, hopsize, &ft, fbins * frames, MAGSQ)))
+    double *ft;
+    if ((e = stft(src, sz, framesize, windowsize, hopsize, &ft, MAGSQ)))
         return e;
     
     /* Convert amplitude to Decibels */
