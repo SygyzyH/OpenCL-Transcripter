@@ -1,10 +1,10 @@
-double hann(int x, int windowsize) {
+inline double win(int x, int windowsize) {
     /* Hann window function to be used as windowing function for stft */
     return pow(sin(M_PI * x / windowsize), 2);
 }
 
 __kernel void stft(__global double *src, int framesize, int windowsize, int hopsize, __global double *res, int op) {
-	int fbins = (int) framesize / 2;
+	int fbins = (int) framesize / 2 + 1;
 
 	int frame = get_global_id(0);
 	int freqbi = get_global_id(1);
@@ -15,7 +15,7 @@ __kernel void stft(__global double *src, int framesize, int windowsize, int hops
 	double sumi = 0;
 	
 	for (int n = 0; n < framesize; n++) {
-		double r = src[n + frame * hopsize] * hann(n, windowsize);
+		double r = src[n + frame * hopsize] * win(n, windowsize);
         double phi = -2 * M_PI * n * freq / framesize;
 		sumr += r * cos(phi);
 		sumi += r * sin(phi);
