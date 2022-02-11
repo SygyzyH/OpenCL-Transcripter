@@ -21,7 +21,7 @@ __kernel void matsub(__global double *a, __global double *b, unsigned int w, uns
 	int gw = get_global_id(0);
 	int gh = get_global_id(1);
 
-	res[gw + gh * w] = a[gw + gh * w] + b[gw + gh * w];
+	res[gw + gh * w] = a[gw + gh * w] - b[gw + gh * w];
 }
 
 __kernel void matmuls(__global double *a, double s, unsigned int w, unsigned int h, __global double *res) {

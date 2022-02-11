@@ -13,7 +13,7 @@
 #include "math.h"
 #include "../io/args.h"
 
-#define noerr(e) { if ((e)) { puts("MATH_H: Initialized math UNSUCCESSFULY."); return e; } }
+#define noerr(e) { if ((e)) { puts("MATH_H: Initialized math UNSUCCESSFULY."); fflush(stdout); return e; } }
 
 cl_platform_id cpPlatform;        // OpenCL platform
 cl_device_id device_id;           // device ID
@@ -46,9 +46,7 @@ int mainit() {
     noerr(err);
     
     // Get the compute matprog from the source code
-    char *matSource = ldfile("B:\\My Stuff\\C Code\\cnntts\\io\\test.txt");
-    printf("src:\n%s", matSource);
-    fflush(stdout);
+    char *matSource = ldfile(MAT_PROG);
     matprog = clCreateProgramWithSource(context, 1, (const char **) &matSource, NULL, &err);
     free(matSource);
     noerr(err);
@@ -56,7 +54,6 @@ int mainit() {
     mathprog = clCreateProgramWithSource(context, 1, (const char **) &mathSource, NULL, &err);
     free(mathSource);
     noerr(err);
-    return 0;
     // TODO: In debug mode, print if CL_BUILD_ERROR
     err = clBuildProgram(matprog, 0, NULL, NULL, NULL, NULL);
     noerr(err);
@@ -92,6 +89,9 @@ int macln() {
     
     clReleaseCommandQueue(queue);
     clReleaseContext(context);
+    
+    if (chkset(sets, DB))
+        puts("MATH_H: Cleanup successful.");
     
     return MNO_ERR;
 }

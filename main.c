@@ -22,7 +22,6 @@ int main(int argc, char *argv[]) {
     if (e) return e;
     e = mainit();
     if (e) return e;
-    return 0;
     
     // Start audio
     e = austrt();
