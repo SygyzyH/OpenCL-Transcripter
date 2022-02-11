@@ -23,16 +23,20 @@ enum MATH_ERR { MNO_ERR=0, MINVALID_ARG, MZERO_DIV, MSMALL_BUF };
 #define stfth(sz, framesize, hopsize) ceil(((sz - framesize) / hopsize) + 1);
 #define stftwh(sz, framesize, hopsize, w, h) { *w = stftw(framesize); *h = stfth(sz, framesize, hopsize); } 
 
-double hann(int x, int windowsize);
 int amptodb(double **src, int sz, double topdb, int op);
-int stft(double *src, int sz, int framesize, int windowsize, int hopsize, double (*w)(int, int), double **res, int szr, int op);
+int stft(double *src, int sz, int framesize, int windowsize, int hopsize, double **res, int szr, int op);
 int melspec(double *src, int sz, int framesize, int windowsize, int hopsize, int bands, double fstart, double fend, double **res);
 
-int matmul(double *a, double *b, unsigned int aw, unsigned int ah, unsigned int bw, unsigned int bh, double **res);
-int matadd(double *a, double *b, unsigned int aw, unsigned int ah, unsigned int bw, unsigned int bh, double **res);
-int matsub(double *a, double *b, unsigned int aw, unsigned int ah, unsigned int bw, unsigned int bh, double **res);
-int matmuls(double *a, double b, unsigned int aw, unsigned int ah, double **res);
-int matadds(double *a, double b, unsigned int aw, unsigned int ah, double **res);
+int matmul(double *a, unsigned int aw, unsigned int ah, 
+           double *b, unsigned int bw, unsigned int bh, double **res);
+int matadd(double *a, unsigned int aw, unsigned int ah,
+           double *b, unsigned int bw, unsigned int bh, double **res);
+int matsub(double *a, unsigned int aw, unsigned int ah,
+           double *b, unsigned int bw, unsigned int bh, double **res);
+int matmuls(double *a, unsigned int aw, unsigned int ah,
+            double b, double **res);
+int matadds(double *a, unsigned int aw, unsigned int ah,
+            double b, double **res);
 
 int mainit();
 int macln();

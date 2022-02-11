@@ -15,10 +15,14 @@
 
 #define noerr(e) { if ((e)) { puts("MATH_H: Initialized math UNSUCCESSFULY."); fflush(stdout); return e; } }
 
-cl_platform_id cpPlatform;        // OpenCL platform
-cl_device_id device_id;           // device ID
-cl_context context;               // context
-cl_command_queue queue;           // command queue
+// Platform
+cl_platform_id cpPlatform;
+// Device ID
+cl_device_id device_id;
+// Context
+cl_context context;
+// Command queue
+cl_command_queue queue;
 
 // Programs
 cl_program matprog;
@@ -31,36 +35,48 @@ cl_kernel kmatsub;
 cl_kernel kmatmuls;
 cl_kernel kmatadds;
 
+cl_kernel kstft;
+
 int mainit() {
     int err;
     
-    /* Init matrix lib */
     err = clGetPlatformIDs(1, &cpPlatform, NULL);
     noerr(err);
-    // TODO: If no GPU, use CPU
     err = clGetDeviceIDs(cpPlatform, CL_DEVICE_TYPE_GPU, 1, &device_id, NULL);
-    noerr(err);
+    // If no GPU was found, use the CPU instead. Cant see how this would ever
+    // fail, since the docs state the CPU is the host device - meaning, if this
+    // code is running, there must be a CPU to run it. 
+    if (err == CL_DEVICE_NOT_FOUND) {
+        if (chkset(sets, DB))
+            puts("Failed to get a GPU device, running un-accelerated.");
+        clGetDeviceIDs(cpPlatform, CL_DEVICE_TYPE_CPU, 1, &device_id, NULL);
+    } else
+        noerr(err);
+    
     context = clCreateContext(0, 1, &device_id, NULL, NULL, &err);
     noerr(err);
     queue = clCreateCommandQueue(context, device_id, 0, &err);
     noerr(err);
+    
+    /* Init matrix lib */
     
     // Get the compute matprog from the source code
     char *matSource = ldfile(MAT_PROG);
     matprog = clCreateProgramWithSource(context, 1, (const char **) &matSource, NULL, &err);
     free(matSource);
     noerr(err);
-    char *mathSource = ldfile(MATH_PROG);
-    mathprog = clCreateProgramWithSource(context, 1, (const char **) &mathSource, NULL, &err);
-    free(mathSource);
-    noerr(err);
-    // TODO: In debug mode, print if CL_BUILD_ERROR
+    // If there was a build error, in debug mode id like to know why
+    // that is.
     err = clBuildProgram(matprog, 0, NULL, NULL, NULL, NULL);
-    noerr(err);
-    err = clBuildProgram(mathprog, 0, NULL, NULL, NULL, NULL);
+    if (chkset(sets, DB) && err == CL_BUILD_PROGRAM_FAILURE) {
+        char log[2048];
+        int e = clGetProgramBuildInfo(matprog, device_id, CL_PROGRAM_BUILD_LOG, 2048, &log, NULL);
+        printf("(%d), Build failed. LOG:\n%s\n", e, log);
+        fflush(stdout);
+    }
     noerr(err);
     
-    /* Make all kernels */
+    // Make all kernels
     kmatmul = clCreateKernel(matprog, "matmul", &err);
     noerr(err);
     kmatadd = clCreateKernel(matprog, "matadd", &err);
@@ -70,6 +86,26 @@ int mainit() {
     kmatmuls = clCreateKernel(matprog, "matmuls", &err);
     noerr(err);
     kmatadds = clCreateKernel(matprog, "matadds", &err);
+    noerr(err);
+    
+    /* Init  math lib */
+    
+    char *mathSource = ldfile(MATH_PROG);
+    mathprog = clCreateProgramWithSource(context, 1, (const char **) &mathSource, NULL, &err);
+    free(mathSource);
+    noerr(err);
+    
+    err = clBuildProgram(mathprog, 0, NULL, NULL, NULL, NULL);
+    if (chkset(sets, DB) && err == CL_BUILD_PROGRAM_FAILURE) {
+        char log[2048];
+        int e = clGetProgramBuildInfo(mathprog, device_id, CL_PROGRAM_BUILD_LOG, 2048, &log, NULL);
+        printf("(%d), Build failed. LOG:\n%s\n", e, log);
+        fflush(stdout);
+    }
+    noerr(err);
+    
+    // Make kernels
+    kstft = clCreateKernel(mathprog, "stft", &err);
     noerr(err);
     
     if (chkset(sets, DB))
@@ -96,8 +132,8 @@ int macln() {
     return MNO_ERR;
 }
 
-int matmul(double *a, double *b, unsigned int aw, unsigned int ah,
-           unsigned int bw, unsigned int bh, double **res) {
+int matmul(double *a, unsigned int aw, unsigned int ah,
+           double *b, unsigned int bw, unsigned int bh, double **res) {
     unsigned int k, az, bz;
     
     if (aw == bh) {
@@ -158,8 +194,8 @@ int matmul(double *a, double *b, unsigned int aw, unsigned int ah,
     return MNO_ERR;
 }
 
-int matadd(double *a, double *b, unsigned int aw, unsigned int ah, 
-           unsigned int bw, unsigned int bh, double **res) {
+int matadd(double *a, unsigned int aw, unsigned int ah, 
+           double *b, unsigned int bw, unsigned int bh, double **res) {
     if (aw != bw || ah != bh) return MINVALID_ARG;
     
     double *h_r = (double *) malloc(sizeof(double) * aw * ah);
@@ -207,8 +243,8 @@ int matadd(double *a, double *b, unsigned int aw, unsigned int ah,
     return MNO_ERR;
 }
 
-int matsub(double *a, double *b, unsigned int aw, unsigned int ah, 
-           unsigned int bw, unsigned int bh, double **res) {
+int matsub(double *a, unsigned int aw, unsigned int ah, 
+           double *b, unsigned int bw, unsigned int bh, double **res) {
     if (aw != bw || ah != bh) return MINVALID_ARG;
     
     double *h_r = (double *) malloc(sizeof(double) * aw * ah);
@@ -256,7 +292,7 @@ int matsub(double *a, double *b, unsigned int aw, unsigned int ah,
     return MNO_ERR;
 }
 
-int matmuls(double *a, double b, unsigned int aw, unsigned int ah, double **res) {
+int matmuls(double *a, unsigned int aw, unsigned int ah, double b, double **res) {
     // assert(a != *res)
     double *h_r = (double *) malloc(sizeof(double) * aw * ah);
     
@@ -300,7 +336,7 @@ int matmuls(double *a, double b, unsigned int aw, unsigned int ah, double **res)
     return MNO_ERR;
 }
 
-int matadds(double *a, double b, unsigned int aw, unsigned int ah, double **res) {
+int matadds(double *a, unsigned int aw, unsigned int ah, double b, double **res) {
     // assert(a != *res)
     double *h_r = (double *) malloc(sizeof(double) * aw * ah);
     
@@ -344,12 +380,8 @@ int matadds(double *a, double b, unsigned int aw, unsigned int ah, double **res)
     return MNO_ERR;
 }
 
-double hann(int x, int windowsize) {
-    /* Hann window function to be used as windowing function for stft */
-    return pow(sin(M_PI * x / windowsize), 2);
-}
-
-int stft(double *src, int sz, int framesize, int windowsize, int hopsize, double (*w)(int, int), double **res, int szr, int op) {
+int stft(double *src, int sz, int framesize, int windowsize, int hopsize,
+         double **res, int szr, int op) {
 #ifdef __CUDACC__
     // GPU Implementation
     return astft(src, sz, framesize, windowsize, hopsize, res, szr, op);
@@ -378,7 +410,7 @@ int stft(double *src, int sz, int framesize, int windowsize, int hopsize, double
 			double sumi = 0;
             
             for (int n = 0; n < framesize; n++) {
-                double r = src[n + frame * hopsize] * (*w)(n, windowsize);
+                double r = src[n + frame * hopsize]; //* (*w)(n, windowsize);
                 double phi = -2 * M_PI * n * freq / framesize;
 				sumr += r * cos(phi);
 				sumi += r * sin(phi);
@@ -472,7 +504,7 @@ int melspec(double *src, int sz, int framesize, int windowsize, int hopsize, int
     /* Extract STFT */
     
     double *ft = (double *) malloc(fbins * frames * sizeof(double));
-    if ((e = stft(src, sz, framesize, windowsize, hopsize, hann, &ft, fbins * frames, MAGSQ)))
+    if ((e = stft(src, sz, framesize, windowsize, hopsize, &ft, fbins * frames, MAGSQ)))
         return e;
     
     /* Convert amplitude to Decibels */
@@ -527,7 +559,7 @@ int melspec(double *src, int sz, int framesize, int windowsize, int hopsize, int
     
     /* Apply filter bank to signal */
     
-    matmul(fban, ft, fbins, frames, fbins, bands, res);
+    matmul(fban, fbins, frames, ft, fbins, bands, res);
     
     /* Cleanup */
     
