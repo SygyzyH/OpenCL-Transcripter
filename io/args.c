@@ -67,8 +67,8 @@ int hndl_set(int argc, char *argv[]) {
 }
 
 char* ldfile(char const *filepath) {
-    FILE *file = fopen(filepath, "r");
-    if (chkset(sets, DB) && file == NULL)
+    FILE *file = fopen(filepath, "rb");
+    if (file == NULL)
         perror("File read failed: ");
     
     int file_size;
@@ -77,8 +77,8 @@ char* ldfile(char const *filepath) {
     fseek(file, 0L, SEEK_END);
     file_size = ftell(file);
     rewind(file);
-    text = malloc(file_size + 1);
-    fread(text, 1, file_size, file);
+    text = (char *) malloc(sizeof(char) * (file_size + 1));
+    fread(text, sizeof(char), file_size, file);
     text[file_size] = '\0';
     fclose(file);
     return text;

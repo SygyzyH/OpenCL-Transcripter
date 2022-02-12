@@ -4,6 +4,7 @@
 #include "io/args.h"
 #include "io/audio.h"
 #include "math/math.h"
+#include "math/ml.h"
 
 int main(int argc, char *argv[]) {
     sets = hndl_set(argc, argv);
@@ -22,6 +23,19 @@ int main(int argc, char *argv[]) {
     if (e) return e;
     e = mainit();
     if (e) return e;
+    
+    Mat a, b, res;
+    a.width = a.height = b.width = b.height = 3;
+    double d[] = { 1, 2, 3, 4, 5, 6, 7, 8, 9 };
+    a.data = b.data = (double *) d;
+    
+    matadd(unpkmat(a), unpkmat(b), &res.data);
+    
+    for (int i = 0; i < 3; i++) {
+        for (int j = 0; j < 3; j++)
+            printf("%lf, ", res.data[j + i * 3]);
+        puts("");
+    }
     
     // Start audio
     e = austrt();

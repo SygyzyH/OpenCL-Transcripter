@@ -71,7 +71,7 @@ int mainit() {
     if (chkset(sets, DB) && err == CL_BUILD_PROGRAM_FAILURE) {
         char log[2048];
         int e = clGetProgramBuildInfo(matprog, device_id, CL_PROGRAM_BUILD_LOG, 2048, &log, NULL);
-        printf("(%d), Build failed. LOG:\n%s\n", e, log);
+        printf("MAT_PROG: (%d), Build failed. LOG:\n%s\n", e, log);
         fflush(stdout);
     }
     noerr(err);
@@ -99,7 +99,7 @@ int mainit() {
     if (chkset(sets, DB) && err == CL_BUILD_PROGRAM_FAILURE) {
         char log[2048];
         int e = clGetProgramBuildInfo(mathprog, device_id, CL_PROGRAM_BUILD_LOG, 2048, &log, NULL);
-        printf("(%d), Build failed. LOG:\n%s\n", e, log);
+        printf("MATH_PROG: (%d), Build failed. LOG:\n%s\n", e, log);
         fflush(stdout);
     }
     noerr(err);
