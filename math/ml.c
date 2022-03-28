@@ -1,18 +1,3 @@
-/*
-Layers needed to be implemented (in ascending difficulty):
-
-Convelution
-
-
-Implemented:
-
-MaxPooling
-BatchNorm
-Dropout
-ReLu
-Softmax
-*/
-
 #include <math.h>
 #include <stdlib.h>
 #include <time.h>
@@ -22,17 +7,16 @@ Softmax
 
 int conv2d(double *params, int paramsw, int unused0,
            double *in, int inw, int inh, Mat **out) {
-    if (paramsw != ) return MLINVALID_ARG;
-    
     /*
 Parameters order:
 - stridew
 - strideh
-- pad
 
 - filterw
 - filterh
 - filtern
+
+- pad
 - channels
 
 filtern * filterw * filterh times:
@@ -41,15 +25,107 @@ filtern * filterw * filterh times:
 filtern times:
 - bias
 */
+#pragma pack(push, 1)
+    typedef struct {
+        double stridew;
+        double strideh;
+        double filterw;
+        double filterh;
+        double filtern;
+        double pad;
+        double channels;
+    } PARAMS;
+#pragma pack(pop)
+    
+    if (paramsw != sizeof(PARAMS)) return MLINVALID_ARG;
+    PARAMS *param = (PARAMS *) params;
+    if (paramsw != sizeof(PARAMS) + param->filterw * param->filterh * param->filtern + param->filtern) return MLINVALID_ARG;
+    
+    // ooo spooky pointer math, im so scared let me call mommy java to pick me up
+    double *weights = (double *) params + sizeof(PARAMS);
+    int weightn = param->filterw * param->filterh * param->filtern;
+    double *bias = weights + weightn;
+    int biasn = param->filtern;
+    
+    /*
+Multidimensionality in memory is laid out as:
+for a tensor with 2nd degree dimensions of
+w - 2
+h - 2
+
+and c extra dimensions, the final dimensions would be
+c - 3
+w - 2
+h - 2 * c = 6
+
+and the data would be laid out as such:
+
+d1 d1
+d1 d1
+-----
+d2 d2
+d2 d2
+-----
+d3 d3
+d3 d3
+*/
+    
+    int ptop, pbot, pleft, pright;
+    switch (param->pad) {
+        case SAME:
+        // Matlab pads with the ceil on bottom and right side
+        int pw = param->filterw - param->stridew;
+        int ph = param->filterh - param->strideh;
+        
+        ptop = floor(ph / 2);
+        pbot = ph - ptop;
+        pleft = floor(pw / 2);
+        pright = pw - pleft;
+        break;
+        
+        case NONE:
+        ptop = 0;
+        pbot = 0;
+        pright = 0;
+        pleft = 0;
+        break;
+        
+        default:
+        return MLINVALID_ARG;
+    }
+    
+    Mat *o = (Mat *) malloc(sizeof(Mat));
+    o->width = floor((inw - param->filterw + 2 * pright) / param->stridew + 1);
+    o-> height = floor(param->filtern * (inh - param->filterh + 2 * pbot) / param->strideh + 1);
+    o->data = (double *) malloc(sizeof(double) * o->width * o->height);
+    
+    int i, j, il, jl;
+    
+    for (int filter = 0; filter < param->filtern; filter++) {
+        j += filter * inw;
+        for (; i < il; i += param->stridew) {
+            for (; j < jl; j += param->strideh) {
+                // TODO: also needs to handle padding
+                o->data[j + i * o->width] = 
+                    bias[filter] + 
+                    matdot((double *) in + j + i * inw, param->filterw, param->filterh,
+                           weights, param->filterw, param->filterh);
+            }
+        }
+    }
+    
+    *out = o;
     
     return MLNO_ERR;
 }
 
+// TODO: refractor
 // TODO: This may require some testing...
 int maxpool(double *params, int paramsw, int unused0,
             double *in, int inw, int inh, Mat **out) {
     if (paramsw != 5) return MLINVALID_ARG;
     
+    // TODO: channels
 #define POOLW 0
 #define POOLH 1
 #define STRIDEW 2
@@ -63,6 +139,7 @@ int maxpool(double *params, int paramsw, int unused0,
     int pad = params[PAD];
     
     Mat *o = (Mat *) malloc(sizeof(Mat));
+    // TODO: padding may effect the size calculation
     o->width = ceil((double) inw / stridew);
     o->height = ceil((double) inh / strideh);
     o->data = (double *) malloc(sizeof(double) * o->width * o->height);
@@ -103,7 +180,7 @@ int maxpool(double *params, int paramsw, int unused0,
                 }
             }
             
-            o->data[ceil((double) j / strideh) + ceil((double) inw * i / stridew)] = max;
+            o->data[ceil((double) i / stridew) + ceil((double) j / strideh) o->width] = max;
         }
     }
     
@@ -116,23 +193,19 @@ int bnorm(double *params, int paramsw, int unused0,
           double *in, int inw, int inh, Mat **out) {
     /*
 Parameters order:
-- epsil
-
-   inw times
+   insz times
 - mean
 - variance
 - offset
 - scale
 */
-#define MEAN 1
-#define VARIANCE 2
-#define OFFSET 3
-#define SCALE 4
+#define MEAN 0
+#define VARIANCE 1
+#define OFFSET 2
+#define SCALE 3
     
     int insz = inw * inh;
-    if (paramsw - 1 != insz) return MLSIZE_MISMATCH;
-    
-    double epsil = params[0];
+    if (paramsw != insz) return MLSIZE_MISMATCH;
     
     Mat *o = (Mat *) malloc(sizeof(Mat));
     o->width = inw;
@@ -141,7 +214,7 @@ Parameters order:
     
     // https://www.mathworks.com/help/deeplearning/ref/nnet.cnn.layer.batchnormalizationlayer.html
     for (int i = 0; i < insz; i++)
-        o->data[i] = params[i + SCALE] * (in[i] - params[i + MEAN]) / sqrt(params[i + VARIANCE] + epsil) + params[i + OFFSET];
+        o->data[i] = params[i + SCALE] * (in[i] - params[i + MEAN]) / sqrt(params[i + VARIANCE] + EPSIL) + params[i + OFFSET];
     
     *out = o;
     

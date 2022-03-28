@@ -5,8 +5,6 @@
 #ifndef MATH_H
 #define MATH_H
 
-// TODO: These should not be absolute! but its the only thing that seems to work
-// when the ldfile function is in a diffrent file...
 #define MAT_PROG "./math/hware/mat.cl"
 #define MATH_PROG "./math/hware/math.cl"
 
