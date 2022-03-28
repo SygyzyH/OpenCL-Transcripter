@@ -5,6 +5,31 @@
 #include "math.h"
 #include "ml.h"
 
+/*
+Multidimensionality in memory is handled as:
+for a tensor with 2nd degree dimensions of
+w - 2
+h - 2
+
+and c extra dimensions, the final dimensions would be
+c - 3
+w - 2
+h - 2 * c = 6
+
+and the data would be laid out as such:
+
+d1 d1
+d1 d1
+-----
+d2 d2
+d2 d2
+-----
+d3 d3
+d3 d3
+*/
+
+// TODO: This may require some testing...
+
 int conv2d(double *params, int paramsw, int unused0,
            double *in, int inw, int inh, Mat **out) {
     /*
@@ -43,39 +68,16 @@ filtern times:
     
     // ooo spooky pointer math, im so scared let me call mommy java to pick me up
     double *weights = (double *) params + sizeof(PARAMS);
-    int weightn = param->filterw * param->filterh * param->filtern;
+    int weightn = (int) param->filterw * param->filterh * param->filtern;
     double *bias = weights + weightn;
-    int biasn = param->filtern;
-    
-    /*
-Multidimensionality in memory is laid out as:
-for a tensor with 2nd degree dimensions of
-w - 2
-h - 2
-
-and c extra dimensions, the final dimensions would be
-c - 3
-w - 2
-h - 2 * c = 6
-
-and the data would be laid out as such:
-
-d1 d1
-d1 d1
------
-d2 d2
-d2 d2
------
-d3 d3
-d3 d3
-*/
+    int biasn = (int) param->filtern;
     
     int ptop, pbot, pleft, pright;
     switch (param->pad) {
         case SAME:
         // Matlab pads with the ceil on bottom and right side
-        int pw = param->filterw - param->stridew;
-        int ph = param->filterh - param->strideh;
+        int pw = (int) param->filterw - param->stridew;
+        int ph = (int) param->filterh - param->strideh;
         
         ptop = floor(ph / 2);
         pbot = ph - ptop;
@@ -96,20 +98,31 @@ d3 d3
     
     Mat *o = (Mat *) malloc(sizeof(Mat));
     o->width = floor((inw - param->filterw + 2 * pright) / param->stridew + 1);
-    o-> height = floor(param->filtern * (inh - param->filterh + 2 * pbot) / param->strideh + 1);
+    o->height = floor(param->filtern * (inh - param->filterh + 2 * pbot) / param->strideh + 1);
     o->data = (double *) malloc(sizeof(double) * o->width * o->height);
     
-    int i, j, il, jl;
-    
+    // TODO: This also HAS to run on the GPU.
     for (int filter = 0; filter < param->filtern; filter++) {
-        j += filter * inw;
-        for (; i < il; i += param->stridew) {
-            for (; j < jl; j += param->strideh) {
-                // TODO: also needs to handle padding
-                o->data[j + i * o->width] = 
-                    bias[filter] + 
-                    matdot((double *) in + j + i * inw, param->filterw, param->filterh,
-                           weights, param->filterw, param->filterh);
+        for (int i = -pleft; i < inw + pright; i += param->stridew) {
+            for (int j = -ptop; j < inh + pbot; j += param->strideh) {
+                double sum = bias[filter];
+                for (int c = 0; c < param->channels; c++) {
+                    for (int k = i; k < param->filterw; k++) {
+                        for (int l = j; j < param->filterh; l++) {
+                            
+                            // Usually when padding you'd create a new array and add the
+                            // padding zeros, however, in this direct implementation we
+                            // can just check if were in padding space and not add the
+                            // result to the total sum. Saves time copying the array and
+                            // saves on memory usage.
+                            if (k + l * param->filterw > 0 && k + l * param->filterw < inw * inh)
+                                sum += in[k + l * param->filterw + c * inw * inh] *
+                                weights[k + l * param->filterw + c * param->filterw * param->filterh];
+                        }
+                    }
+                }
+                
+                o->data[ceil((double) (i + pleft) / param->stridew) + ceil((double) (j + ptop) * o->width / param->strideh) + filter * o->width * o->height] = sum;
             }
         }
     }
@@ -119,68 +132,71 @@ d3 d3
     return MLNO_ERR;
 }
 
-// TODO: refractor
-// TODO: This may require some testing...
 int maxpool(double *params, int paramsw, int unused0,
             double *in, int inw, int inh, Mat **out) {
-    if (paramsw != 5) return MLINVALID_ARG;
     
-    // TODO: channels
-#define POOLW 0
-#define POOLH 1
-#define STRIDEW 2
-#define STRIDEH 3
-#define PAD 4
+#pragma pack(push, 1)
+    typedef struct {
+        double poolw;
+        double poolh;
+        double stridew;
+        double strideh;
+        double pad;
+        double channel;
+    } PARAMS;
+#pragma pack(pop)
     
-    int poolw = params[POOLW];
-    int poolh = params[POOLH];
-    int stridew = params[STRIDEW];
-    int strideh = parmas[STRIDEH];
-    int pad = params[PAD];
+    if (paramsw != sizeof(PARAMS)) return MLINVALID_ARG;
+    PARAMS *param = (PARAMS *) params;
     
-    Mat *o = (Mat *) malloc(sizeof(Mat));
-    // TODO: padding may effect the size calculation
-    o->width = ceil((double) inw / stridew);
-    o->height = ceil((double) inh / strideh);
-    o->data = (double *) malloc(sizeof(double) * o->width * o->height);
-    
-    int i, j, il, jl;
-    switch (pad) {
-        case NONE:
-        i = 0;
-        j = 0;
-        il = inw;
-        jl = inh;
+    int ptop, pbot, pleft, pright;
+    switch (param->pad) {
+        case SAME:
+        // Matlab pads with the ceil on bottom and right side
+        int pw = (int) param->poolw - param->stridew;
+        int ph = (int) param->poolh - param->strideh;
+        
+        ptop = floor(ph / 2);
+        pbot = ph - ptop;
+        pleft = floor(pw / 2);
+        pright = pw - pleft;
         break;
         
-        case SAME:
-        i = 1 - poolw;
-        j = 1 - poolh;
-        il = inw + poolw - 1;
-        jl = inh + poolh - 1;
+        case NONE:
+        ptop = 0;
+        pbot = 0;
+        pright = 0;
+        pleft = 0;
         break;
         
         default:
         return MLINVALID_ARG;
     }
     
-    // TODO: this HAS to run on GPU. Each block for each thread
-    for (; i < il; i += stridew) {
-        for (; j < jl; j += strideh) {
-            double max = in[MIN(MAX(0, i), inw) + inw * MIN(MAX(0, j), inh)];
-            for (int k = i; k < poolw + i; k++) {
-                for (int l = j; j < poolh + j; l++) {
-                    // In diffrent padding modes, we may be accessing values outside
-                    // the bounds of the input array. Those values should be padded,
-                    // but its faster to just assign them to the padding value during
-                    // the calculation.
-                    double c;
-                    if (k + l * poolw > 0 && k + l * poolw < inw * inh)
-                        max = MAX(max, in[k + l * poolw]);
+    Mat *o = (Mat *) malloc(sizeof(Mat));
+    o->width = floor((inw - param->poolw + 2 * pright) / param->stridew + 1);
+    o->height = floor(param->channels * (inh - param->poolh + 2 * pbot) / param->strideh + 1);
+    o->data = (double *) malloc(sizeof(double) * o->width * o->height);
+    
+    // TODO: This HAS to run on GPU. Each block for each thread
+    for (int c = 0; c < param->channels; c++) {
+        for (int i = -pleft; i < inw + pright; i += param->stridew) {
+            for (int j = -ptop; j < inh + pbot; j += param->strideh) {
+                double max = in[MIN(MAX(0, i), inw) + MIN(MAX(0, j), inh) * inw + c * inw * inh];
+                for (int k = i; k < param->poolw + i; k++) {
+                    for (int l = j; j < param->poolh + j; l++) {
+                        
+                        // In diffrent padding modes, we may be accessing values outside
+                        // the bounds of the input array. Those values should be padded,
+                        // but its faster to just assign them to the padding value during
+                        // the calculation.
+                        if (k + l * param->poolw > 0 && k + l * param->poolw < inw * inh)
+                            max = MAX(max, in[k + l * param->poolw + c * inw * inh]);
+                    }
                 }
+                
+                o->data[ceil((double) i / param->stridew) + ceil((double) j / param->strideh) * o->width + c * o->width * o->height] = max;
             }
-            
-            o->data[ceil((double) i / stridew) + ceil((double) j / strideh) o->width] = max;
         }
     }
     
@@ -189,6 +205,7 @@ int maxpool(double *params, int paramsw, int unused0,
     return MLNO_ERR;
 }
 
+// TODO: Maybe this can also use a struct (?)
 int bnorm(double *params, int paramsw, int unused0,
           double *in, int inw, int inh, Mat **out) {
     /*
