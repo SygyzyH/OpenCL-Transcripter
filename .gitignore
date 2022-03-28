@@ -1,2 +1,4 @@
 testing/*
 *.exe
+machine/*
+dataset/*

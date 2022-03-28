@@ -5,6 +5,8 @@
 
 enum WAV_ERR { WNO_ERR=0, WSMALL_BUF, WOPEN_ERR, WNOT_SUPPORTED };
 
+// Packing is nescessery when loading using fprintf
+#pragma pack(1)
 typedef struct {
     unsigned char fmt[4]; // "fmt\0" string
     unsigned int fsize; // size of the format data
