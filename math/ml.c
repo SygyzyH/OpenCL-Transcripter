@@ -308,30 +308,32 @@ int relu(double *unused0, int unused1, int unused2,
     dout->data = (double *) malloc(sizeof(double) * iw * ih);
     
     for (int i = 0; i < iw * ih; i++)
-        dout->data[i] = MAX(dout->data[i], 0);
+        dout->data[i] = MAX(in[i], 0);
     
     return MLNO_ERR;
 }
 
 int forwardpass(Layer machine, Mat input, Mat **output) {
-    Layer *p = machine.next;
-    *output = &input;
-    Mat *data = *output;
+    Layer *p = &machine;
+    Mat *datai = &input;
+    Mat *prevout = NULL;
     
     while (p != NULL) {
-        // Refrance ;)
-        Mat *old_data = data;
-        
         // Ensure the size is correct
-        if (p->inw != data->width || p->inh != data->height) return MLSIZE_MISMATCH;
+        if (p->inw != datai->width || p->inh != datai->height) return MLSIZE_MISMATCH;
         // Run the data through the current layer
-        if((*p->transform)(unpkmat(p->params), unpkmatp(data), &data)) return MLLAYER_ERR;
+        if((*p->transform)(unpkmat(p->params), unpkmatp(datai), output)) return MLLAYER_ERR;
         
         // Move to the next layer
-        free(old_data->data);
-        free(old_data);
-        
+        datai = *output;
         p = p->next;
+        
+        if (prevout != NULL)
+            free(prevout->data);
+        // free-ing NULL is allowed
+        free(prevout);
+        
+        prevout = *output;
     }
     
     return MLNO_ERR;

@@ -41,11 +41,9 @@ int main(int argc, char *argv[]) {
     machine->inw = 3;
     machine->inh = 3;
     
-    Mat params;
-    params.width = 0;
-    params.height = 0;
-    params.data = NULL;
-    machine->params = params;
+    machine->params.width = 0;
+    machine->params.height = 0;
+    machine->params.data = NULL;
     
     machine->transform = relu;
     machine->prev = NULL;
@@ -53,19 +51,23 @@ int main(int argc, char *argv[]) {
     
     Mat input, *output;
     input.width = 3;
-    input. height = 3;
+    input.height = 3;
     double da[] = { 1, 2, -3, 1, -2, 3, -1, 2, 3 };
-    input.data = d;
+    input.data = da;
     
-    forwardpass(*machine, input, &output);
+    e = forwardpass(*machine, input, &output);
     
-    puts("Foraward pass success");
-    for (int i = 0; i < output->width; i++) {
-        for (int j = 0; j < output->height; j++) {
-            printf("%lf, ", output->data[i + j * output->width]);
+    if (!e) {
+        puts("MAIN_C: [TESTING]: Foraward pass success!");
+        printf("MAIN_C [TESTING]: e: %d, w: %d, h: %d\n", e, output->width, output->height);
+        
+        for (int i = 0; i < output->height; i++) {
+            for (int j = 0; j < output->width; j++) {
+                printf("%lf, ", output->data[j + i * output->width]);
+            }
+            puts("");
         }
-        puts("");
-    }
+    } else puts("MAIN_C: [TESTING]: Forward pass FAILURE");
     
     // Start audio
     e = austrt();
