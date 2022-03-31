@@ -38,21 +38,21 @@ int main(int argc, char *argv[]) {
     }
     
     Layer *machine = (Layer *) malloc(sizeof(Layer));
-    machine->inw = 3;
-    machine->inh = 3;
+    machine->inw = 5;
+    machine->inh = 1;
     
     machine->params.width = 0;
     machine->params.height = 0;
-    machine->params.data = NULL;
+    machine->params.data = &(double) { 0.5 };
     
-    machine->transform = relu;
+    machine->transform = dropout;
     machine->prev = NULL;
     machine->next = NULL;
     
     Mat input, *output;
-    input.width = 3;
-    input.height = 3;
-    double da[] = { 1, 2, -3, 1, -2, 3, -1, 2, 3 };
+    input.width = 5;
+    input.height = 1;
+    double da[] = { 1, 2, 3, 4, 5 };
     input.data = da;
     
     e = forwardpass(*machine, input, &output);

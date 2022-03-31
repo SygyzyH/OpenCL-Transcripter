@@ -254,21 +254,22 @@ int dropout(double *prob, int unused0, int unused1,
     // p must be in range 0 < p < 1
     if (1 < p || p < 0) return MLINVALID_ARG;
     
-    *out = (Mat *) malloc(sizeof(Mat));
-    Mat *o = *out;
+    Mat *o = (Mat *) malloc(sizeof(Mat));
     o->width = iw;
     o->height = ih;
     o->data = (double *) malloc(sizeof(double) * iw * ih);
     
     srand(time(NULL));
-    for (int i = 0; i < iw; i++) {
-        for (int j = 0; j < ih; j++) {
+    for (int i = 0; i < ih; i++) {
+        for (int j = 0; j < iw; j++) {
             if (((double) rand() / RAND_MAX) < p)
                 o->data[j + i * iw] = 0;
             else
                 o->data[j + i * iw] = in[j + i * iw];
         }
     }
+    
+    *out = o;
     
     return MLNO_ERR;
 }
@@ -277,13 +278,11 @@ int softmax(double *unused0, int unused1, int unused2,
             double *in, int iw, int ih, Mat **out) {
     int insz = iw * ih;
     
-    *out = (Mat *) malloc(sizeof(Mat));
-    Mat *dout = *out;
-    
     // Returns classesX1 size vector
-    dout->width = insz;
-    dout->height = 1;
-    dout->data = (double *) malloc(sizeof(double) * insz);
+    Mat *o = (Mat *) malloc(sizeof(Mat));
+    o->width = insz;
+    o->height = 1;
+    o->data = (double *) malloc(sizeof(double) * insz);
     
     // First, calculate the devisor
     double devisor = 0;
@@ -291,24 +290,25 @@ int softmax(double *unused0, int unused1, int unused2,
         devisor += exp(in[i]);
     
     for (int i = 0; i < insz; i++)
-        dout->data[i] = exp(in[i]) / devisor;
+        o->data[i] = exp(in[i]) / devisor;
     
+    *out = o;
     
     return MLNO_ERR;
 }
 
 int relu(double *unused0, int unused1, int unused2,
          double *in, int iw, int ih, Mat **out) {
-    *out = (Mat *) malloc(sizeof(Mat));
-    Mat *dout = *out;
     
-    // Returns input size vector
-    dout->width = iw;
-    dout->height = ih;
-    dout->data = (double *) malloc(sizeof(double) * iw * ih);
+    Mat *o = (Mat *) malloc(sizeof(Mat));
+    o->width = iw;
+    o->height = ih;
+    o->data = (double *) malloc(sizeof(double) * iw * ih);
     
     for (int i = 0; i < iw * ih; i++)
-        dout->data[i] = MAX(in[i], 0);
+        o->data[i] = MAX(in[i], 0);
+    
+    *out = o;
     
     return MLNO_ERR;
 }
