@@ -73,24 +73,28 @@ filtern times:
     int biasn = (int) param->filtern;
     
     int ptop, pbot, pleft, pright;
-    switch (param->pad) {
-        case SAME:
-        // Matlab pads with the ceil on bottom and right side
-        int pw = (int) param->filterw - param->stridew;
-        int ph = (int) param->filterh - param->strideh;
+    switch ((int) param->pad) {
+        case SAME: {
+            // Matlab pads with the ceil on bottom and right side
+            int pw = (int) param->filterw - param->stridew;
+            int ph = (int) param->filterh - param->strideh;
+            
+            ptop = floor(ph / 2);
+            pbot = ph - ptop;
+            pleft = floor(pw / 2);
+            pright = pw - pleft;
+            
+            break;
+        }
         
-        ptop = floor(ph / 2);
-        pbot = ph - ptop;
-        pleft = floor(pw / 2);
-        pright = pw - pleft;
-        break;
-        
-        case NONE:
-        ptop = 0;
-        pbot = 0;
-        pright = 0;
-        pleft = 0;
-        break;
+        case NONE: {
+            ptop = 0;
+            pbot = 0;
+            pright = 0;
+            pleft = 0;
+            
+            break;
+        }
         
         default:
         return MLINVALID_ARG;
@@ -104,7 +108,7 @@ filtern times:
     // TODO: This also HAS to run on the GPU.
     for (int filter = 0; filter < param->filtern; filter++) {
         for (int i = -pleft; i < inw + pright; i += param->stridew) {
-            for (int j = -ptop; j < inh + pbot; j += param->strideh) {
+            for (int j = -ptop; j < inh / param->channels + pbot; j += param->strideh) {
                 double sum = bias[filter];
                 for (int c = 0; c < param->channels; c++) {
                     for (int k = i; k < param->filterw; k++) {
@@ -116,13 +120,13 @@ filtern times:
                             // result to the total sum. Saves time copying the array and
                             // saves on memory usage.
                             if (k + l * param->filterw > 0 && k + l * param->filterw < inw * inh)
-                                sum += in[k + l * param->filterw + c * inw * inh] *
-                                weights[k + l * param->filterw + c * param->filterw * param->filterh];
+                                sum += in[(int) (k + l * param->filterw + c * inw * inh / param->channels)] *
+                                weights[(int) (k + l * param->filterw + c * param->filterw * param->filterh / param->channels)];
                         }
                     }
                 }
                 
-                o->data[ceil((double) (i + pleft) / param->stridew) + ceil((double) (j + ptop) * o->width / param->strideh) + filter * o->width * o->height] = sum;
+                o->data[(int) (ceil((double) (i + pleft) / param->stridew) + ceil((double) (j + ptop) * o->width / param->strideh) + filter * o->width * o->height / param->filtern)] = sum;
             }
         }
     }
@@ -142,7 +146,7 @@ int maxpool(double *params, int paramsw, int unused0,
         double stridew;
         double strideh;
         double pad;
-        double channel;
+        double channels;
     } PARAMS;
 #pragma pack(pop)
     
@@ -150,24 +154,28 @@ int maxpool(double *params, int paramsw, int unused0,
     PARAMS *param = (PARAMS *) params;
     
     int ptop, pbot, pleft, pright;
-    switch (param->pad) {
-        case SAME:
-        // Matlab pads with the ceil on bottom and right side
-        int pw = (int) param->poolw - param->stridew;
-        int ph = (int) param->poolh - param->strideh;
+    switch ((int) param->pad) {
+        case SAME: {
+            // Matlab pads with the ceil on bottom and right side
+            int pw = (int) param->poolw - param->stridew;
+            int ph = (int) param->poolh - param->strideh;
+            
+            ptop = floor(ph / 2);
+            pbot = ph - ptop;
+            pleft = floor(pw / 2);
+            pright = pw - pleft;
+            
+            break;
+        }
         
-        ptop = floor(ph / 2);
-        pbot = ph - ptop;
-        pleft = floor(pw / 2);
-        pright = pw - pleft;
-        break;
-        
-        case NONE:
-        ptop = 0;
-        pbot = 0;
-        pright = 0;
-        pleft = 0;
-        break;
+        case NONE: {
+            ptop = 0;
+            pbot = 0;
+            pright = 0;
+            pleft = 0;
+            
+            break;
+        }
         
         default:
         return MLINVALID_ARG;
@@ -181,8 +189,8 @@ int maxpool(double *params, int paramsw, int unused0,
     // TODO: This HAS to run on GPU. Each block for each thread
     for (int c = 0; c < param->channels; c++) {
         for (int i = -pleft; i < inw + pright; i += param->stridew) {
-            for (int j = -ptop; j < inh + pbot; j += param->strideh) {
-                double max = in[MIN(MAX(0, i), inw) + MIN(MAX(0, j), inh) * inw + c * inw * inh];
+            for (int j = -ptop; j < inh / param->channels + pbot; j += param->strideh) {
+                double max = in[(int) (MIN(MAX(0, i), inw) + MIN(MAX(0, j), inh) * inw + c * inw * inh / param->channels)];
                 for (int k = i; k < param->poolw + i; k++) {
                     for (int l = j; j < param->poolh + j; l++) {
                         
@@ -190,12 +198,12 @@ int maxpool(double *params, int paramsw, int unused0,
                         // the bounds of the input array. Those values should be padded,
                         // but its faster to just assign them to the padding value during
                         // the calculation.
-                        if (k + l * param->poolw > 0 && k + l * param->poolw < inw * inh)
-                            max = MAX(max, in[k + l * param->poolw + c * inw * inh]);
+                        if (k + l * param->poolw > 0 && k + l * param->poolw < inw * inh / param->channels)
+                            max = MAX(max, in[(int) (k + l * param->poolw + c * inw * inh / param->channels)]);
                     }
                 }
                 
-                o->data[ceil((double) i / param->stridew) + ceil((double) j / param->strideh) * o->width + c * o->width * o->height] = max;
+                o->data[(int) (ceil((double) i / param->stridew) + ceil((double) j / param->strideh) * o->width + c * o->width * o->height / param->channels)] = max;
             }
         }
     }
@@ -222,7 +230,7 @@ Parameters order:
 #define SCALE 3
     
     int insz = inw * inh;
-    if (paramsw != insz) return MLSIZE_MISMATCH;
+    if (paramsw != insz * 4) return MLSIZE_MISMATCH;
     
     Mat *o = (Mat *) malloc(sizeof(Mat));
     o->width = inw;
@@ -247,9 +255,9 @@ int dropout(double *prob, int unused0, int unused1,
     if (1 < p || p < 0) return MLINVALID_ARG;
     
     *out = (Mat *) malloc(sizeof(Mat));
-    Mat *o = out;
-    o->width = inw;
-    o->height = inh;
+    Mat *o = *out;
+    o->width = iw;
+    o->height = ih;
     o->data = (double *) malloc(sizeof(double) * iw * ih);
     
     srand(time(NULL));
@@ -315,15 +323,15 @@ int forwardpass(Layer machine, Mat input, Mat **output) {
         Mat *old_data = data;
         
         // Ensure the size is correct
-        if (p.inw != data->width || p.inhg != data->height) return MLSIZE_MISMATCH;
+        if (p->inw != data->width || p->inh != data->height) return MLSIZE_MISMATCH;
         // Run the data through the current layer
-        if((*p.transform)(unpckmat(p.params), unpkmatp(data), &data)) return MLLAYER_ERR;
+        if((*p->transform)(unpkmat(p->params), unpkmatp(data), &data)) return MLLAYER_ERR;
         
         // Move to the next layer
         free(old_data->data);
         free(old_data);
         
-        p = p.next;
+        p = p->next;
     }
     
     return MLNO_ERR;
@@ -335,6 +343,6 @@ void addlayer(Layer **machine, Layer **newl) {
     while (p != NULL)
         p = p->next;
     
-    *newl->prev = p;
+    (*newl)->prev = p;
     p->next = *newl;
 }

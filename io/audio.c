@@ -10,7 +10,7 @@ WAVEHDR header [NUM_BUF];
 int ibuf = 0;
 short int *pbuf;
 int dlock = 1;
-int init = 0;
+int isauinit = 0;
 
 void CALLBACK whndl(HWAVEIN hwi, UINT uMsg, DWORD dwInstance, DWORD dwParam1, DWORD dwParam2);
 void prntbr();
@@ -104,7 +104,7 @@ int auinit() {
     }
     err += waveInAddBuffer(hWaveIn, &header[0], sizeof(WAVEHDR)) != MMSYSERR_NOERROR;
     
-    if (!err) init = 1;
+    if (!err) isauinit = 1;
     if (chkset(sets, DB))
         printf("AUDIO_H: Initialized audio %s.\n", err? "UNSUCCESSFULY" : "successfuly");
     
@@ -113,7 +113,7 @@ int auinit() {
 
 int austrt() {
     int err;
-    if (!init) return 1;
+    if (!isauinit) return 1;
     err = waveInStart(hWaveIn) != MMSYSERR_NOERROR;
     if (chkset(sets, DB))
         printf("AUDIO_H: Device start %s\n", err? "UNSUCCESSFUL" : "successful");
@@ -137,7 +137,7 @@ int aucln() {
     
     free(pbuf);
     
-    if (!err) init = 0;
+    if (!err) isauinit = 0;
     if (chkset(sets, DB))
         printf("AUDIO_H: Cleanup %s.\n", err? "UNSUCCESSFUL" : "successful");
     

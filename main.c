@@ -6,6 +6,8 @@
 #include "math/math.h"
 #include "math/ml.h"
 
+int init();
+
 int main(int argc, char *argv[]) {
     sets = hndl_set(argc, argv);
     if (chkset(sets, DB))
@@ -17,13 +19,11 @@ int main(int argc, char *argv[]) {
     // If OK flag is clr, abort.
     if (!chkset(sets, OK)) return 1;
     
+    // Init
     int e;
-    /* Init */
-    e = auinit();
-    if (e) return e;
-    e = mainit();
-    if (e) return e;
+    if ((e = init())) return e;
     
+    // Testing math lib
     Mat a, b, res;
     a.width = a.height = b.width = b.height = 3;
     double d[] = { 1, 2, 3, 4, 5, 6, 7, 8, 9 };
@@ -34,6 +34,36 @@ int main(int argc, char *argv[]) {
     for (int i = 0; i < 3; i++) {
         for (int j = 0; j < 3; j++)
             printf("%lf, ", res.data[j + i * 3]);
+        puts("");
+    }
+    
+    Layer *machine = (Layer *) malloc(sizeof(Layer));
+    machine->inw = 3;
+    machine->inh = 3;
+    
+    Mat params;
+    params.width = 0;
+    params.height = 0;
+    params.data = NULL;
+    machine->params = params;
+    
+    machine->transform = relu;
+    machine->prev = NULL;
+    machine->next = NULL;
+    
+    Mat input, *output;
+    input.width = 3;
+    input. height = 3;
+    double da[] = { 1, 2, -3, 1, -2, 3, -1, 2, 3 };
+    input.data = d;
+    
+    forwardpass(*machine, input, &output);
+    
+    puts("Foraward pass success");
+    for (int i = 0; i < output->width; i++) {
+        for (int j = 0; j < output->height; j++) {
+            printf("%lf, ", output->data[i + j * output->width]);
+        }
         puts("");
     }
     
@@ -50,6 +80,17 @@ int main(int argc, char *argv[]) {
     
     if (chkset(sets, DB))
         puts("Gracefully resolved!");
+    
+    return 0;
+}
+
+int init() {
+    int e;
+    
+    e = auinit();
+    if (e) return e;
+    e = mainit();
+    if (e) return e;
     
     return 0;
 }
