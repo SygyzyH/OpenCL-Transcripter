@@ -10,6 +10,7 @@
 
 #define MAX(X, Y) (((X) > (Y)) ? (X) : (Y))
 #define MIN(X, Y) (((X) < (Y)) ? (X) : (Y))
+#define CLAMP(BOT, A, TOP) (MIN(MAX(BOT, A), TOP))
 
 #define EPSIL 1e-10
 

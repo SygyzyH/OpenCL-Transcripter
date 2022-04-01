@@ -150,15 +150,34 @@ int maxpool(double *params, int paramsw, int unused0,
     } PARAMS;
 #pragma pack(pop)
     
-    if (paramsw != sizeof(PARAMS)) return MLINVALID_ARG;
+    if (paramsw != sizeof(PARAMS) / sizeof(double)) return MLINVALID_ARG;
     PARAMS *param = (PARAMS *) params;
     
+    int pw, ph;
     int ptop, pbot, pleft, pright;
     switch ((int) param->pad) {
         case SAME: {
+            // In same padding mode, the output size would be input size / stride.
+            // Using the formula (input size - pool size + 2 * padding) / stride + 1 = output
+            // Solving for 2 * padding gives padding = pool size - stride.
+            // Than the padding of each dimension is padding / 2. Padding doesn't have to
+            // be devisable by 2, so to solve that one side is given the reminder.
             // Matlab pads with the ceil on bottom and right side
-            int pw = (int) param->poolw - param->stridew;
-            int ph = (int) param->poolh - param->strideh;
+            pw = (int) abs(param->poolw - param->stridew);
+            ph = (int) abs(param->poolh - param->strideh);
+            
+            // If there is a need for more padding than the pool size, there would
+            // be iterations over padding only. No point in those.
+            if (pw > param->poolw || ph > param->poolh) {
+                pw = ph = 0;
+                
+                ptop = 0;
+                pbot = 0;
+                pright = 0;
+                pleft = 0;
+                
+                break;
+            }
             
             ptop = floor(ph / 2);
             pbot = ph - ptop;
@@ -181,29 +200,45 @@ int maxpool(double *params, int paramsw, int unused0,
         return MLINVALID_ARG;
     }
     
+    printf("Padding - top: %d, bot: %d, right: %d, left: %d\n", ptop, pbot, pright, pleft);
+    int einw = inw, einh = (int) inh / param->channels;
+    
     Mat *o = (Mat *) malloc(sizeof(Mat));
-    o->width = floor((inw - param->poolw + 2 * pright) / param->stridew + 1);
-    o->height = floor(param->channels * (inh - param->poolh + 2 * pbot) / param->strideh + 1);
+    o->width = floor((inw - param->poolw + pw) / param->stridew + 1);
+    o->height = floor(param->channels * ((einh - param->poolh + ph) / param->strideh + 1));
     o->data = (double *) malloc(sizeof(double) * o->width * o->height);
     
-    // TODO: This HAS to run on GPU. Each block for each thread
     for (int c = 0; c < param->channels; c++) {
-        for (int i = -pleft; i < inw + pright; i += param->stridew) {
-            for (int j = -ptop; j < inh / param->channels + pbot; j += param->strideh) {
-                double max = in[(int) (MIN(MAX(0, i), inw) + MIN(MAX(0, j), inh) * inw + c * inw * inh / param->channels)];
-                for (int k = i; k < param->poolw + i; k++) {
-                    for (int l = j; j < param->poolh + j; l++) {
-                        
-                        // In diffrent padding modes, we may be accessing values outside
-                        // the bounds of the input array. Those values should be padded,
-                        // but its faster to just assign them to the padding value during
-                        // the calculation.
-                        if (k + l * param->poolw > 0 && k + l * param->poolw < inw * inh / param->channels)
-                            max = MAX(max, in[(int) (k + l * param->poolw + c * inw * inh / param->channels)]);
+        // effective channel height start and end is the starting and ending 
+        // height  when considering the layout of channels in memory
+        int ecinhs = c * einh;
+        int ecinhe = (c + 1) * einh;
+        
+        // Iterating over the output is clearer than over the input
+        for (int i = 0; i < o->height / param->channels; i++) {
+            for (int j = 0; j < o->width; j++) {
+                // Calculate the starting position. Pool will be iterated starting from
+                // these indexes
+                int startw = j * param->stridew - pleft;
+                int starth = i * param->strideh - ptop + ecinhs;
+                
+                // Starting max is the first in the pool
+                double max = in[CLAMP(0, startw, einw - 1) + CLAMP(ecinhs, starth, ecinhe - 1) * einw];
+                
+                printf("Started testing (%d, %d)\n", startw, starth);
+                // Iterate over the pool and find the max value. Padding is ignored by
+                // clamping the value in the effective range 
+                for (int k = starth; k < param->poolh + starth; k++) {
+                    for (int l = startw; l < param->poolw + startw; l++) {
+                        printf("Tested (%d, %d) = %lf\n", l, k, in[CLAMP(0, l, einw - 1) + CLAMP(ecinhs, k, ecinhe - 1) * einw]);
+                        max = MAX(max, in[CLAMP(0, l, einw - 1) + CLAMP(ecinhs, k, ecinhe - 1) * einw]);
                     }
                 }
+                printf("max: %lf\n", max);
                 
-                o->data[(int) (ceil((double) i / param->stridew) + ceil((double) j / param->strideh) * o->width + c * o->width * o->height / param->channels)] = max;
+                // Save the result
+                int eoc = (int) c * o->width * o->height / param->channels;
+                o->data[j + i * o->width + eoc] = max;
             }
         }
     }
@@ -213,7 +248,6 @@ int maxpool(double *params, int paramsw, int unused0,
     return MLNO_ERR;
 }
 
-// TODO: Maybe this can also use a struct (?)
 int bnorm(double *params, int paramsw, int unused0,
           double *in, int inw, int inh, Mat **out) {
     /*
@@ -224,13 +258,18 @@ Parameters order:
 - offset
 - scale
 */
-#define MEAN 0
-#define VARIANCE 1
-#define OFFSET 2
-#define SCALE 3
+    
+#pragma pack(push, 1)
+    typedef struct {
+        double mean;
+        double variance;
+        double offset;
+        double scale;
+    } PARAMS;
+#pragma pack(pop)
     
     int insz = inw * inh;
-    if (paramsw != insz * 4) return MLSIZE_MISMATCH;
+    if (paramsw != insz * sizeof(PARAMS) / sizeof(double)) return MLSIZE_MISMATCH;
     
     Mat *o = (Mat *) malloc(sizeof(Mat));
     o->width = inw;
@@ -238,8 +277,11 @@ Parameters order:
     o->data = (double *) malloc(sizeof(double) * o->width * o->height);
     
     // https://www.mathworks.com/help/deeplearning/ref/nnet.cnn.layer.batchnormalizationlayer.html
-    for (int i = 0; i < insz; i++)
-        o->data[i] = params[i + SCALE] * (in[i] - params[i + MEAN]) / sqrt(params[i + VARIANCE] + EPSIL) + params[i + OFFSET];
+    for (int i = 0; i < insz; i++) {
+        // Take one block of parameters
+        PARAMS *param = (PARAMS*) params + i * sizeof(PARAMS);
+        o->data[i] = param->scale * (in[i] - param->mean) / sqrt(param->variance + EPSIL) + param->offset;
+    }
     
     *out = o;
     
@@ -319,8 +361,13 @@ int forwardpass(Layer machine, Mat input, Mat **output) {
     Mat *prevout = NULL;
     
     while (p != NULL) {
-        // Ensure the size is correct
-        if (p->inw != datai->width || p->inh != datai->height) return MLSIZE_MISMATCH;
+        // TODO: Does size checking need to happen before the layer is called? why not in the
+        // layer implementation itself?
+        
+        // If there needs to be size checking
+        if(p->inw != -1 && p->inh != -1)
+            // Ensure the size is correct
+            if (p->inw != datai->width || p->inh != datai->height) return MLSIZE_MISMATCH;
         // Run the data through the current layer
         if((*p->transform)(unpkmat(p->params), unpkmatp(datai), output)) return MLLAYER_ERR;
         

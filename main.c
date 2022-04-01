@@ -38,22 +38,23 @@ int main(int argc, char *argv[]) {
     }
     
     Layer *machine = (Layer *) malloc(sizeof(Layer));
-    machine->inw = 5;
-    machine->inh = 1;
+    machine->inw = 4;
+    machine->inh = 4;
     
-    machine->params.width = 0;
-    machine->params.height = 0;
-    machine->params.data = &(double) { 0.5 };
+    machine->params.width = 6;
+    machine->params.height = 1;
+    double da[] = { 2, 2, 2, 2, SAME, 1 };
+    machine->params.data = da;
     
-    machine->transform = dropout;
+    machine->transform = maxpool;
     machine->prev = NULL;
     machine->next = NULL;
     
     Mat input, *output;
-    input.width = 5;
-    input.height = 1;
-    double da[] = { 1, 2, 3, 4, 5 };
-    input.data = da;
+    input.width = 4;
+    input.height = 4;
+    double dat[] = { 12, 20, 30, 0, 8, 12, 2, 0, 34, 70, 37, 4, 112, 100, 25, 12 };
+    input.data = dat;
     
     e = forwardpass(*machine, input, &output);
     
@@ -67,7 +68,7 @@ int main(int argc, char *argv[]) {
             }
             puts("");
         }
-    } else puts("MAIN_C: [TESTING]: Forward pass FAILURE");
+    } else printf("MAIN_C: [TESTING]: Forward pass FAILURE: %d\n", e);
     
     // Start audio
     e = austrt();
