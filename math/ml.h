@@ -46,5 +46,7 @@ int bnorm(double *params, int paramsw, int unused0,
           double *in, int inw, int inh, Mat **out);
 int maxpool(double *params, int paramsw, int unused0,
             double *in, int inw, int inh, Mat **out);
+int conv2d(double *params, int paramsw, int unused0,
+           double *in, int inw, int inh, Mat **out);
 
 #endif //ML_H

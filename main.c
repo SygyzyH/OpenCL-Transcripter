@@ -41,12 +41,19 @@ int main(int argc, char *argv[]) {
     machine->inw = 4;
     machine->inh = 4;
     
-    machine->params.width = 6;
+    machine->params.width = 7 + 16 + 2;
     machine->params.height = 1;
-    double da[] = { 2, 2, 2, 2, SAME, 1 };
+    double da[] = { 1, 1, 2, 2, 2, SAME, 2,
+        // Weights
+        // c = 1      // c = 2
+        1, 1, 0, 0,   1, 1, 0, 0, // filter = 1
+        
+        1, 1, 0, 0,   0, 0, 0, 0, // filter = 2
+        // Bias
+        0, 1 };
     machine->params.data = da;
     
-    machine->transform = maxpool;
+    machine->transform = conv2d;
     machine->prev = NULL;
     machine->next = NULL;
     
