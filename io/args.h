@@ -1,8 +1,9 @@
 /* date = January 30th 2022 2:46 pm */
-#include <stdio.h>
 
 #ifndef ARGS_H
 #define ARGS_H
+
+#include <stdio.h>
 
 extern int sets;
 

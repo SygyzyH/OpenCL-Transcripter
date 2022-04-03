@@ -29,8 +29,6 @@ d3 d3
 d3 d3
 */
 
-// TODO: This may require some testing...
-
 int conv2d(double *params, int paramsw, int unused0,
            double *in, int inw, int inh, Mat **out) {
     /*
@@ -140,13 +138,13 @@ filtern times:
                 
                 // Convelution goes three dimensionaly
                 for (int c = 0; c < param->channels; c++) {
-                    // effective channel height start and end is the starting and ending 
-                    // height when considering the layout of channels in memory
+                    // effective channel height start (and end) is the starting and ending 
+                    // heights when considering the layout of channels in memory.
                     int ecinhs = c * einh;
                     int ecinhe = (c + 1) * einh;
                     
                     // Calculate the starting position. Filter will be iterated starting from
-                    // these indexes
+                    // these indexes.
                     int startw = j * param->stridew - pleft;
                     int starth = i * param->strideh - ptop + ecinhs;
                     
