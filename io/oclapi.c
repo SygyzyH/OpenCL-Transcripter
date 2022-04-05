@@ -48,6 +48,9 @@ int occln() {
     Klist *k = kernels;
     
     while (k != NULL) {
+        // TODO: Programs will repeat if multiple kernels are added at once.
+        // This will cause clReleaseProgram to return an error. This is not
+        // problematic per say but not best practice and should be avoided.
         clReleaseProgram(k->prog);
         clReleaseKernel(k->kernel);
         
@@ -120,6 +123,9 @@ int run_kernel(const char *name, size_t globalSize[3], ...) {
     int argcount;
     clGetKernelInfo(k->kernel, CL_KERNEL_NUM_ARGS, sizeof(int), &argcount, NULL);
     
+    Arguments *kernelargs = (Arguments *) malloc(sizeof(Arguments));
+    kernelargs->next = NULL;
+    
     va_list valist;
     va_start(valist, globalSize);
     
@@ -127,11 +133,50 @@ int run_kernel(const char *name, size_t globalSize[3], ...) {
         // Variable size
         int argsz = -1;
         // Get variable type
-        char rettype[255];
+        char rettype[16];
         size_t lastindex;
-        clGetKernelArgInfo(k->kernel, i, CL_KERNEL_ARG_TYPE_NAME, 255, rettype, &lastindex);
+        clGetKernelArgInfo(k->kernel, i, CL_KERNEL_ARG_TYPE_NAME, 16, rettype, &lastindex);
         
-        // TODO: This NEEDS some refractoring
+        // TODO: Speed improvement: Clacluate and store things like parameter count,
+        // parameter types, parameter type sizes and so on ahead of time (preferably
+        // when registering the kernel)
+        void *data;
+        if (rettype[lastindex - 1] == '*') {
+            
+            int dsize = va_arg(valist, int);
+            int flags = va_arg(valist, int);
+            cl_mem_flags clflags;
+            switch (flags & ~OCLCPY) {
+                case OCLREAD:
+                clflags = CL_MEM_READ_ONLY;
+                break;
+                
+                case OCLWRITE: 
+                clflags = CL_MEM_WRITE_ONLY;
+                break;
+                
+                case OCLREAD | OCLWRITE:
+                clflags = CL_MEM_READ_WRITE;
+                break;
+                
+                default:
+                return OCLINVALID_ARG;
+            }
+            
+            data = &clCreateBuffer(context, clflags, sizeof_st(rettype) * dsize, NULL, NULL);
+            
+            if (flags & OCLCPY)
+                clEnqueueWriteBuffer(queue, (cl_mem) *data, CL_TRUE, 0, sizeof_st(rettype) * dsize, host_data, 0, NULL, NULL);
+            
+        } else
+            data = &va_arg_st(valist, rettype);
+        clSetKernelArg(k->kernel, i, sizeof_st(rettype), data);
+        
+        kernelargs->arg = data;
+        kernelargs->type = rettype;
+        
+        
+        /*// TODO: This NEEDS some refractoring
         if (strstr(rettype, "int") == 0) {
             int data;
             if (rettype[lastindex - 1] == '*') {
@@ -272,11 +317,15 @@ int run_kernel(const char *name, size_t globalSize[3], ...) {
             }
             
             clSetKernelArg(k->kernel, i, sizeof(data), &data);
-        } else return OCLUNKNOWN_SIZE;
+        } else return OCLUNKNOWN_SIZE;*/
         
     }
     
     va_end(valist);
+    
+    // Actually run the kernel
+    clEnqueueNDRangeKernel(queue, k->kernel, 3, NULL, globalSize, NULL, 0, NULL, NULL);
+    clFinish(queue);
     
     return OCLNO_ERR;
 }

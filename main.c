@@ -3,6 +3,7 @@
 
 #include "io/args.h"
 #include "io/audio.h"
+#include "io/oclapi.h"
 #include "math/math.h"
 #include "math/ml.h"
 
@@ -23,19 +24,14 @@ int main(int argc, char *argv[]) {
     int e;
     if ((e = init())) return e;
     
-    // Testing math lib
-    Mat a, b, res;
-    a.width = a.height = b.width = b.height = 3;
-    double d[] = { 1, 2, 3, 4, 5, 6, 7, 8, 9 };
-    a.data = b.data = (double *) d;
+    // Testing OpenCL API
+    const char *kernel_code = "__kernel void test(int input, int *output) { *output = input; }";
+    register_from_src(&kernel_code, 1, "test");
+    int *oclres;
+    size_t gsz[3] = { 1, 0, 0};
+    run_kernel("test", gsz, 69, oclres, 1, OCLREAD | OCLWRITE);
     
-    matadd(unpkmat(a), unpkmat(b), &res.data);
-    
-    for (int i = 0; i < 3; i++) {
-        for (int j = 0; j < 3; j++)
-            printf("%lf, ", res.data[j + i * 3]);
-        puts("");
-    }
+    // Testing ml lib
     
     Layer *machine = (Layer *) malloc(sizeof(Layer));
     machine->inw = 4;
@@ -100,6 +96,8 @@ int init() {
     e = auinit();
     if (e) return e;
     e = mainit();
+    if (e) return e;
+    e = ocinit();
     if (e) return e;
     
     return 0;
