@@ -51,7 +51,9 @@ int occln() {
         // TODO: Programs will repeat if multiple kernels are added at once.
         // This will cause clReleaseProgram to return an error. This is not
         // problematic per say but not best practice and should be avoided.
-        clReleaseProgram(k->prog);
+        cl_program prog;
+        clGetKernelInfo(k->kernel, CL_KERNEL_PROGRAM, sizeof(cl_program), &prog, NULL);
+        clReleaseProgram(prog);
         clReleaseKernel(k->kernel);
         
         Klist *oldk = k;
@@ -76,22 +78,27 @@ int register_from_src(const char **src, int kerneln, ...) {
     int err;
     
     cl_program prog = clCreateProgramWithSource(context, 1, src, NULL, &err);
+    // Build with kernel arg info flag to retrive it later. This solution thankfully
+    // allows for building programs and having access to some of the information form
+    // the compilation process, allowing for this whole library to feasably exist.
     err = clBuildProgram(prog, 0, NULL, "-cl-kernel-arg-info", NULL, NULL);
     
     va_list valist;
     va_start(valist, kerneln);
+    
     for (int kernel = 0; kernel < kerneln; kernel++) {
         char *name = va_arg(valist, char *);
         
         Klist *k = kernels;
         
         if (k == NULL) {
-            k = (Klist *) malloc(sizeof(Klist));
+            kernels = (Klist *) malloc(sizeof(Klist));
+            k = kernels;
             k->next = NULL;
         } else {
             while (k->next != NULL) {
                 if (strcmp(k->name, name) == 0) return OCLINVALID_NAME;
-                k = kernels->next;
+                k = k->next;
             }
             
             k->next = (Klist *) malloc(sizeof(Klist));
@@ -99,9 +106,30 @@ int register_from_src(const char **src, int kerneln, ...) {
             k = k->next;
         }
         
-        k->prog = prog;
-        k->name = name;
         k->kernel = clCreateKernel(prog, name, &err);
+        k->name = name;
+        clGetKernelInfo(k->kernel, CL_KERNEL_NUM_ARGS, sizeof(int), &(k->argc), NULL);
+        k->argv = (Karg *) malloc(sizeof(Karg) * k->argc);
+        
+        // Fill out arguments
+        for (int argument = 0; argument < k->argc; argument++) {
+            clGetKernelArgInfo(k->kernel, argument, CL_KERNEL_ARG_TYPE_NAME, RETTYPE_SIZE, k->argv[argument].rettype, NULL);
+            k->argv[argument].isptr = strchr(k->argv[argument].rettype, '*') != 0;
+            
+            if (strstr(k->argv[argument].rettype, "char")) {
+                k->argv[argument].asize = sizeof(char);
+            } else if (strstr(k->argv[argument].rettype, "int")) {
+                k->argv[argument].asize = sizeof(int);
+            } else if (strstr(k->argv[argument].rettype, "float")) {
+                k->argv[argument].asize = sizeof(float);
+            } else if (strstr(k->argv[argument].rettype, "double")) {
+                k->argv[argument].asize = sizeof(double);
+            } else {
+                va_end(valist);
+                puts("INVALID ARG");
+                return OCLINVALID_ARG;
+            }
+        }
     }
     
     va_end(valist);
@@ -109,7 +137,9 @@ int register_from_src(const char **src, int kerneln, ...) {
     return OCLNO_ERR;
 }
 
-int run_kernel(const char *name, size_t globalSize[3], ...) {
+int run_kernel(const char *name, int wdim, size_t *gsz, size_t *lsz, ...) {
+    int err;
+    
     Klist *k = kernels;
     
     while (k != NULL) {
@@ -119,39 +149,44 @@ int run_kernel(const char *name, size_t globalSize[3], ...) {
     
     if (k == NULL) return OCLINVALID_NAME;
     
-    // Number of arguments in kernel
-    int argcount;
-    clGetKernelInfo(k->kernel, CL_KERNEL_NUM_ARGS, sizeof(int), &argcount, NULL);
-    
-    Arguments *kernelargs = (Arguments *) malloc(sizeof(Arguments));
-    kernelargs->next = NULL;
-    
     va_list valist;
-    va_start(valist, globalSize);
+    va_start(valist, lsz);
     
-    for (int i = 0; i < argcount; i++) {
-        // Variable size
-        int argsz = -1;
-        // Get variable type
-        char rettype[16];
-        size_t lastindex;
-        clGetKernelArgInfo(k->kernel, i, CL_KERNEL_ARG_TYPE_NAME, 16, rettype, &lastindex);
-        
-        // TODO: Speed improvement: Clacluate and store things like parameter count,
-        // parameter types, parameter type sizes and so on ahead of time (preferably
-        // when registering the kernel)
+    for (int i = 0; i < k->argc; i++) {
         void *data;
-        if (rettype[lastindex - 1] == '*') {
+        size_t device_dsize = k->argv[i].asize;
+        
+        if (k->argv[i].isptr) {
+            if (strstr(k->argv[i].rettype, "char")) 
+                k->argv[i]._host_data = (char *) (va_arg(valist, int *));
+            else if (strstr(k->argv[i].rettype, "int"))
+                k->argv[i]._host_data = (int *) va_arg(valist, int *);
+            else if (strstr(k->argv[i].rettype, "float"))
+                k->argv[i]._host_data = (float *) (va_arg(valist, double *));
+            else if (strstr(k->argv[i].rettype, "double"))
+                k->argv[i]._host_data = (double *) va_arg(valist, double *);
+            else {
+                va_end(valist);
+                // TODO: Error message
+                puts("TODO: Error message INVALID ARG");
+                return OCLINVALID_ARG;
+            }
             
+            // Store the data size to know how much data to return
             int dsize = va_arg(valist, int);
+            k->argv[i]._dsize = dsize;
+            
+            // Store the flags in-case this argument needs to be copied out
             int flags = va_arg(valist, int);
+            k->argv[i]._flags = flags;
+            
             cl_mem_flags clflags;
-            switch (flags & ~OCLCPY) {
+            switch ((flags & ~OCLCPY) & ~OCLOUT) {
                 case OCLREAD:
                 clflags = CL_MEM_READ_ONLY;
                 break;
                 
-                case OCLWRITE: 
+                case OCLWRITE:
                 clflags = CL_MEM_WRITE_ONLY;
                 break;
                 
@@ -160,171 +195,53 @@ int run_kernel(const char *name, size_t globalSize[3], ...) {
                 break;
                 
                 default:
+                va_end(valist);
                 return OCLINVALID_ARG;
             }
             
-            data = &clCreateBuffer(context, clflags, sizeof_st(rettype) * dsize, NULL, NULL);
+            // This will be freed later
+            k->argv[i]._device_data = clCreateBuffer(context, clflags, k->argv[i].asize * dsize, NULL, NULL);
             
+            data = &(k->argv[i]._device_data);
+            device_dsize = sizeof(cl_mem);
+            
+            // Copy data from given pointer to buffer pointed to by data
             if (flags & OCLCPY)
-                clEnqueueWriteBuffer(queue, (cl_mem) *data, CL_TRUE, 0, sizeof_st(rettype) * dsize, host_data, 0, NULL, NULL);
-            
-        } else
-            data = &va_arg_st(valist, rettype);
-        clSetKernelArg(k->kernel, i, sizeof_st(rettype), data);
-        
-        kernelargs->arg = data;
-        kernelargs->type = rettype;
-        
-        
-        /*// TODO: This NEEDS some refractoring
-        if (strstr(rettype, "int") == 0) {
-            int data;
-            if (rettype[lastindex - 1] == '*') {
-                int *host_data = va_arg(valist, int *);
-                
-                int dsize = va_arg(valist, int);
-                int flags = va_arg(valist, int);
-                cl_mem_flags clflags;
-                switch (flags & ~OCLCPY) {
-                    case OCLREAD:
-                    clflags = CL_MEM_READ_ONLY;
-                    break;
-                    
-                    case OCLWRITE: 
-                    clflags = CL_MEM_WRITE_ONLY;
-                    break;
-                    
-                    case OCLREAD | OCLWRITE:
-                    clflags = CL_MEM_READ_WRITE;
-                    break;
-                    
-                    default:
-                    return OCLINVALID_ARG;
-                }
-                
-                cl_mem data = clCreateBuffer(context, clflags, sizeof(int) * dsize, NULL, NULL);
-                
-                if (flags & OCLCPY)
-                    clEnqueueWriteBuffer(queue, data, CL_TRUE, 0, sizeof(int) * dsize, host_data, 0, NULL, NULL);
-                
-            } else {
-                data = va_arg(valist, int);
+                err = clEnqueueWriteBuffer(queue, *(cl_mem *) data, CL_TRUE, 0, k->argv[i].asize * dsize, k->argv[i]._host_data, 0, NULL, NULL);
+        } else {
+            if (strstr(k->argv[i].rettype, "char")) 
+                data = &(char) { va_arg(valist, int) };
+            else if (strstr(k->argv[i].rettype, "int")) 
+                data = &(int) { va_arg(valist, int) };
+            else if (strstr(k->argv[i].rettype, "float"))
+                data = &(float) { va_arg(valist, double) };
+            else if (strstr(k->argv[i].rettype, "double")) 
+                data = &(double) { va_arg(valist, double) };
+            else {
+                va_end(valist);
+                // TODO: Error message
+                puts("TODO: Error message INVALID ARG");
+                return OCLINVALID_ARG;
             }
-            
-            clSetKernelArg(k->kernel, i, sizeof(data), &data);
-        } else if (strstr(rettype, "char") == 0) {
-            char data;
-            if (rettype[lastindex - 1] == '*') {
-                char *host_data = va_arg(valist, char *);
-                
-                int dsize = va_arg(valist, int);
-                int flags = va_arg(valist, int);
-                cl_mem_flags clflags;
-                switch (flags & ~OCLCPY) {
-                    case OCLREAD:
-                    clflags = CL_MEM_READ_ONLY;
-                    break;
-                    
-                    case OCLWRITE: 
-                    clflags = CL_MEM_WRITE_ONLY;
-                    break;
-                    
-                    case OCLREAD | OCLWRITE:
-                    clflags = CL_MEM_READ_WRITE;
-                    break;
-                    
-                    default:
-                    return OCLINVALID_ARG;
-                }
-                
-                cl_mem data = clCreateBuffer(context, clflags, sizeof(char) * dsize, NULL, NULL);
-                
-                if (flags & OCLCPY)
-                    clEnqueueWriteBuffer(queue, data, CL_TRUE, 0, sizeof(char) * dsize, host_data, 0, NULL, NULL);
-                
-            } else {
-                data = (char) va_arg(valist, int);
-            }
-            
-            clSetKernelArg(k->kernel, i, sizeof(data), &data);
-        } else if (strstr(rettype, "float") == 0) {
-            float data;
-            if (rettype[lastindex - 1] == '*') {
-                float *host_data = va_arg(valist, float *);
-                
-                int dsize = va_arg(valist, int);
-                int flags = va_arg(valist, int);
-                cl_mem_flags clflags;
-                switch (flags & ~OCLCPY) {
-                    case OCLREAD:
-                    clflags = CL_MEM_READ_ONLY;
-                    break;
-                    
-                    case OCLWRITE: 
-                    clflags = CL_MEM_WRITE_ONLY;
-                    break;
-                    
-                    case OCLREAD | OCLWRITE:
-                    clflags = CL_MEM_READ_WRITE;
-                    break;
-                    
-                    default:
-                    return OCLINVALID_ARG;
-                }
-                
-                cl_mem data = clCreateBuffer(context, clflags, sizeof(float) * dsize, NULL, NULL);
-                
-                if (flags & OCLCPY)
-                    clEnqueueWriteBuffer(queue, data, CL_TRUE, 0, sizeof(float) * dsize, host_data, 0, NULL, NULL);
-                
-            } else {
-                data = (float) va_arg(valist, double);
-            }
-            
-            clSetKernelArg(k->kernel, i, sizeof(data), &data);
-        } else if (strstr(rettype, "double") == 0) {
-            double data;
-            if (rettype[lastindex - 1] == '*') {
-                double *host_data = va_arg(valist, double *);
-                
-                int dsize = va_arg(valist, int);
-                int flags = va_arg(valist, int);
-                cl_mem_flags clflags;
-                switch (flags & ~OCLCPY) {
-                    case OCLREAD:
-                    clflags = CL_MEM_READ_ONLY;
-                    break;
-                    
-                    case OCLWRITE: 
-                    clflags = CL_MEM_WRITE_ONLY;
-                    break;
-                    
-                    case OCLREAD | OCLWRITE:
-                    clflags = CL_MEM_READ_WRITE;
-                    break;
-                    
-                    default:
-                    return OCLINVALID_ARG;
-                }
-                
-                cl_mem data = clCreateBuffer(context, clflags, sizeof(double) * dsize, NULL, NULL);
-                
-                if (flags & OCLCPY)
-                    clEnqueueWriteBuffer(queue, data, CL_TRUE, 0, sizeof(double) * dsize, host_data, 0, NULL, NULL);
-                
-            } else {
-                data = va_arg(valist, double);
-            }
-            
-            clSetKernelArg(k->kernel, i, sizeof(data), &data);
-        } else return OCLUNKNOWN_SIZE;*/
+        }
         
+        err = clSetKernelArg(k->kernel, i, device_dsize, data);
+        printf("e: %d\n", err);
     }
     
     va_end(valist);
     
-    // Actually run the kernel
-    clEnqueueNDRangeKernel(queue, k->kernel, 3, NULL, globalSize, NULL, 0, NULL, NULL);
+    // Run the kernel
+    clEnqueueNDRangeKernel(queue, k->kernel, wdim, NULL, gsz, lsz, 0, NULL, NULL);
+    
+    // Copy out the data and free it
+    for (int i = 0; i < k->argc; i++) {
+        if (k->argv[i]._flags & OCLOUT) {
+            clEnqueueReadBuffer(queue, k->argv[i]._device_data, CL_TRUE, 0, k->argv[i].asize * k->argv[i]._dsize, k->argv[i]._host_data, 0, NULL, NULL);
+            clReleaseMemObject(k->argv[i]._device_data);
+        }
+    }
+    
     clFinish(queue);
     
     return OCLNO_ERR;

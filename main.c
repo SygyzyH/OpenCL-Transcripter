@@ -25,11 +25,43 @@ int main(int argc, char *argv[]) {
     if ((e = init())) return e;
     
     // Testing OpenCL API
-    const char *kernel_code = "__kernel void test(int input, int *output) { *output = input; }";
-    register_from_src(&kernel_code, 1, "test");
-    int *oclres;
-    size_t gsz[3] = { 1, 0, 0};
-    run_kernel("test", gsz, 69, oclres, 1, OCLREAD | OCLWRITE);
+    const char *kernel_code =
+        "__kernel                                   \n"
+        "void saxpy_kernel(float alpha,     \n"
+        "                  __global float *A,       \n"
+        "                  __global float *B,       \n"
+        "                  __global float *C)       \n"
+        "{                                          \n"
+        "    //Get the index of the work-item       \n"
+        "    int index = get_global_id(0);          \n"
+        "    C[index] = alpha * A[index] + B[index];\n"
+        "}                                          \n";
+    const char *kernel_code_2 = "__kernel void test(int input, __global int *output) { *output = input; }";
+    register_from_src(&kernel_code, 1, "saxpy_kernel");
+    register_from_src(&kernel_code_2, 1, "test");
+    int ARRSIZE = 5;
+    float *A = (float *) malloc(sizeof(float *) * ARRSIZE);
+    float *B = (float *) malloc(sizeof(float *) * ARRSIZE);
+    float *C = (float *) malloc(sizeof(float *) * ARRSIZE);
+    for (int i = 0; i < ARRSIZE; i++) {
+        A[i] = i;
+        B[i] = 69;
+        C[i] = 0;
+    }
+    
+    size_t gsz = (size_t) ARRSIZE;
+    run_kernel("saxpy_kernel", 1, &gsz, NULL, 100.0f, A, ARRSIZE, OCLREAD | OCLCPY, B, ARRSIZE, OCLREAD | OCLCPY, C, ARRSIZE, OCLWRITE | OCLOUT);
+    //run_kernel("test", gsz, 69);
+    puts("Kernel 1 result:");
+    for (int i = 0; i < ARRSIZE; i++) {
+        printf("C[%d]: %f, ", i, C[i]);
+    } puts("");
+    
+    int *oclout = (int *) malloc(sizeof(int));
+    gsz = (size_t) 1;
+    run_kernel("test", 1, &gsz, NULL, 69, oclout, 1, OCLWRITE | OCLOUT);
+    puts("Kernel 2 result:");
+    printf("%d\n", *oclout);
     
     // Testing ml lib
     
@@ -81,7 +113,9 @@ int main(int argc, char *argv[]) {
     
     e = aucln();
     if (e) return e;
-    e = macln();
+    //e = macln();
+    if (e) return e;
+    e = occln();
     if (e) return e;
     
     if (chkset(sets, DB))

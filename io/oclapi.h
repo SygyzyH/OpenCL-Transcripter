@@ -10,50 +10,48 @@
 #include <CL/cl.h>
 #endif
 
-#define va_arg_st(valist, st) ( (!strstr(st, "char") || !strstr(st, "int"))? va_arg(valist, int) : (!strstr(st, "float") || !strstr(st, "double"))? va_arg(valist, double) : NULL )
-#define sizeof_st(st) ( !strstr(st, "char")? sizeof(char) : !strstr(st, "int")? sizeof(int) : !strstr(st, "float")? sizeof(float) : !strstr(st, "double")? sizeof(double) : 0 )
-#define cast_st(arg, st) ( !strstr(st, "char")? (char) arg : !strstr(st, "int")? (int) arg : !strstr(st, "float")? (float) arg : !strstr(st, "double")? (double) arg : 0 )
+#define DEBUG
+
+#ifdef DEBUG
+#define wrap(e) ( e? printf("Err %d\n", e) : 0 )
+#define wrapf(func, ...) { int e = func(__VA_ARGS__); warp(e) }
+#else
+#define wrap(e) 0
+#define wrapf(func, ...) func(__VA_ARGS__)
+#endif
+
+#define RETTYPE_SIZE 64
 
 enum _OCLAPI_MEM_OP { _OCLCPY, _OCLREAD, _OCLWRITE, _OCLOUT };
 enum OCLAPI_MEM { OCLCPY=1 << _OCLCPY, OCLREAD=1 << _OCLREAD, OCLWRITE=1 << _OCLWRITE, OCLOUT=1 << _OCLOUT };
 
 enum OCLAPI_ERR { OCLNO_ERR=0, OCLINVALID_NAME, OCLUNKNOWN_SIZE, OCLINVALID_ARG };
 
-/*typedef struct klist {
-    cl_program prog;
-    cl_kernel kernel;
-    const char *name;
-    struct klist *next;
-} Klist;*/
+typedef struct arg {
+    char rettype[RETTYPE_SIZE];
+    int isptr;
+    size_t asize;
+    // Temporary variable used during execution
+    int _dsize;
+    int _flags;
+    void *_host_data;
+    cl_mem _device_data;
+} Karg;
 
 typedef struct klist {
     cl_kernel kernel;
-    // Name char limit is 128
-    const char name[128];
+    char *name;
     
     int argc;
-    struct arg {
-        int rettype[16];
-        int isptr;
-        size_t asize;
-        struct arg *nexta;
-    };
+    // Array of args
+    Karg *argv;
     
     struct klist *next;
 } Klist;
 
-typedef struct arg {
-    int size;
-    void *arg;
-    int outputarg;
-    void *outputto;
-    const char *type;
-    struct arg *next;
-} Arguments;
-
 int ocinit();
 int occln();
 int register_from_src(const char **src, int kerneln, ...);
-int run_kernel(const char *name, size_t globalSize[3], ...);
+int run_kernel(const char *name, int wdim, size_t *gsz, size_t *lsz, ...);
 
 #endif //OCLAPI_H
