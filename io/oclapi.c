@@ -1,18 +1,20 @@
 /*
-TODO: This library should handle all things opencl.
-
 Register functions by passing their source code, name, and
 input / output parameters.
 
 Call the function using its name and passing its parameters.
 
-Automatic clean-up
+Automatic clean-up.
+
+TODO: This can be refractored. Error checking, at the very least.
+Maybe also safe calls to run_kernel? (type checking, variable count checks, NULL ptr)
 */
 
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdarg.h>
 #include <string.h>
+#include <stdbool.h>
 
 #include "args.h"
 #include "oclapi.h"
@@ -21,6 +23,8 @@ cl_platform_id cpPlatform;
 cl_device_id device_id;
 cl_context context;
 cl_command_queue queue;
+
+bool oclinit = false;
 
 Klist *kernels = NULL;
 
@@ -34,17 +38,24 @@ int ocinit() {
     // code is running, there must be a CPU to run it. 
     if (err == CL_DEVICE_NOT_FOUND) {
         if (chkset(sets, DB))
-            puts("Failed to get a GPU device, running un-accelerated.");
+            puts("OCLAPI_C: Failed to get a GPU device, running un-accelerated.");
         clGetDeviceIDs(cpPlatform, CL_DEVICE_TYPE_CPU, 1, &device_id, NULL);
     }
     
     context = clCreateContext(0, 1, &device_id, NULL, NULL, &err);
     queue = clCreateCommandQueue(context, device_id, 0, &err);
     
+    if (chkset(sets, DB))
+        puts("OCLAPI_C: Initialized OpenCL API successfuly.");
+    
+    oclinit = true;
+    
     return OCLNO_ERR;
 }
 
 int occln() {
+    if (!oclinit) return OCLUNINITIALIZED;
+    
     Klist *k = kernels;
     
     while (k != NULL) {
@@ -57,6 +68,7 @@ int occln() {
         clReleaseKernel(k->kernel);
         
         Klist *oldk = k;
+        free(k->argv);
         k = k->next;
         free(oldk);
     }
@@ -75,6 +87,8 @@ registered. The user needs to supply a source program and any
 number of kernels in that program. All names must be unique.
 */
 int register_from_src(const char **src, int kerneln, ...) {
+    if (!oclinit) return OCLUNINITIALIZED;
+    
     int err;
     
     cl_program prog = clCreateProgramWithSource(context, 1, src, NULL, &err);
@@ -97,7 +111,11 @@ int register_from_src(const char **src, int kerneln, ...) {
             k->next = NULL;
         } else {
             while (k->next != NULL) {
-                if (strcmp(k->name, name) == 0) return OCLINVALID_NAME;
+                if (strcmp(k->name, name) == 0) { 
+                    va_end(valist);
+                    return OCLINVALID_NAME;
+                }
+                
                 k = k->next;
             }
             
@@ -138,6 +156,7 @@ int register_from_src(const char **src, int kerneln, ...) {
 }
 
 int run_kernel(const char *name, int wdim, size_t *gsz, size_t *lsz, ...) {
+    if (!oclinit) return OCLUNINITIALIZED;
     int err;
     
     Klist *k = kernels;

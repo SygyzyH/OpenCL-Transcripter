@@ -150,7 +150,6 @@ filtern times:
                     
                     // Iterate over the filter. Padding cannot be ignored by clamping
                     // since itll be multiplied by a potentially non-zero value.
-                    printf("Testing (%d, %d)\n", startw, starth);
                     for (int k = starth; k < param->filterh + starth; k++) {
                         for (int l = startw; l < param->filterw + startw; l++) {
                             if (l >= 0 && l < einw && k >= ecinhs && k < ecinhe) {
@@ -286,6 +285,57 @@ int maxpool(double *params, int paramsw, int unused0,
                 o->data[j + i * o->width + eoc] = max;
             }
         }
+    }
+    
+    *out = o;
+    
+    return MLNO_ERR;
+}
+
+int fullyc(double *params, int paramsw, int unused0,
+           double *in, int inw, int inh, Mat **out) {
+    /*
+Parameters order:
+- in size
+- out size
+
+insz * outsz times:
+ - weight
+
+outsz times:
+- bias
+*/
+    
+#pragma pack(push, 1)
+    typedef struct {
+        double insz;
+        double outsz;
+    } PARAMS;
+#pragma pack(pop)
+    
+    if (paramsw < sizeof(PARAMS) / sizeof(double)) return MLSIZE_MISMATCH;
+    PARAMS *param = (PARAMS *) params;
+    if (paramsw != (param->insz + 1)* param->outsz + sizeof(PARAMS) / sizeof(double)) return MLSIZE_MISMATCH;
+    
+    if (inw * inh != param->insz) return MLINVALID_ARG;
+    
+    double *weights = (double *) params + sizeof(PARAMS);
+    int weightn = param->insz * param->outsz;
+    double *bias = (double *) weights + weightn;
+    int biasn = param->outsz;
+    
+    Mat *o = (Mat *) malloc(sizeof(Mat));
+    o->width = param->outsz;
+    o->height = 1;
+    o->data = (double *) malloc(sizeof(double) * o->width * o->height);
+    
+    for (int i = 0; i < param->outsz; i++) {
+        double sum = bias[i];
+        
+        for (int j = 0; j < param->insz; j++)
+            sum += in[j] * weights[(int) (j + i * param->outsz)];
+        
+        o->data[i] = sum;
     }
     
     *out = o;

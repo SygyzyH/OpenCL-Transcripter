@@ -16,7 +16,7 @@
 
 enum STFT_OPTYPE { REAL, COMPLEX, MAGSQ };
 enum DB_OPTYPE { SCALE_MAX, SCALE_ONE, SCALE_FIRST };
-enum MATH_ERR { MNO_ERR=0, MINVALID_ARG, MZERO_DIV, MSMALL_BUF };
+enum MATH_ERR { MNO_ERR=0, MINVALID_ARG, MZERO_DIV, MSMALL_BUF, MUNINITIALIZED };
 
 #define stftw(framesize) ceil(framesize / 2 + 1)
 #define stfth(sz, framesize, hopsize) ceil(((sz - framesize) / hopsize) + 1);
@@ -38,6 +38,5 @@ int matadds(double *a, unsigned int aw, unsigned int ah,
             double b, double **res);
 
 int mainit();
-int macln();
 
 #endif //MATH_H

@@ -113,8 +113,6 @@ int main(int argc, char *argv[]) {
     
     e = aucln();
     if (e) return e;
-    //e = macln();
-    if (e) return e;
     e = occln();
     if (e) return e;
     
@@ -129,9 +127,9 @@ int init() {
     
     e = auinit();
     if (e) return e;
-    e = mainit();
-    if (e) return e;
     e = ocinit();
+    if (e) return e;
+    e = mainit();
     if (e) return e;
     
     return 0;
