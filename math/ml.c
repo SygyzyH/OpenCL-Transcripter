@@ -6,6 +6,8 @@
 #include "math.h"
 #include "ml.h"
 
+// TODO: Layer functions need to run on the GPU, most of 
+// this can be easily done using the math library.
 /*
 Multidimensionality in memory is handled as:
 for a tensor with 2nd degree dimensions of
@@ -294,6 +296,7 @@ int maxpool(double *params, int paramsw, int unused0,
 
 int fullyc(double *params, int paramsw, int unused0,
            double *in, int inw, int inh, Mat **out) {
+    // TODO: Could be done using matmul and matadds.
     /*
 Parameters order:
 - in size
@@ -343,6 +346,30 @@ outsz times:
     return MLNO_ERR;
 }
 
+int zcenter(double *params, int paramsw, int unused0,
+            double *in, int inw, int inh, Mat **out) {
+    // TODO: Could be done using matsub.
+    /*
+Parameters order:
+insz times
+- mean
+*/
+    
+    int insz = inw * inh;
+    if (paramsw != insz) return MLINVALID_ARG;
+    
+    Mat *o = (Mat *) malloc(sizeof(Mat));
+    o->width = inw;
+    o->height = inh;
+    o->data = (double *) malloc(sizeof(double) * o->width * o->height);
+    
+    for (int i = 0; i < insz; i++) o->data[i] = in[i] - params[i];
+    
+    *out = o;
+    
+    return MLNO_ERR;
+}
+
 int bnorm(double *params, int paramsw, int unused0,
           double *in, int inw, int inh, Mat **out) {
     /*
@@ -366,17 +393,16 @@ Parameters order:
     int insz = inw * inh;
     if (paramsw != insz * sizeof(PARAMS) / sizeof(double)) return MLSIZE_MISMATCH;
     
+    PARAMS *param = (PARAMS*) params;
+    
     Mat *o = (Mat *) malloc(sizeof(Mat));
     o->width = inw;
     o->height = inh;
     o->data = (double *) malloc(sizeof(double) * o->width * o->height);
     
     // https://www.mathworks.com/help/deeplearning/ref/nnet.cnn.layer.batchnormalizationlayer.html
-    for (int i = 0; i < insz; i++) {
-        // Take one block of parameters
-        PARAMS *param = (PARAMS*) params + i * sizeof(PARAMS);
-        o->data[i] = param->scale * (in[i] - param->mean) / sqrt(param->variance + EPSIL) + param->offset;
-    }
+    for (int i = 0; i < insz; i++)
+        o->data[i] = param[i].scale * (in[i] - param[i].mean) / sqrt(param[i].variance + EPSIL) + param[i].offset;
     
     *out = o;
     

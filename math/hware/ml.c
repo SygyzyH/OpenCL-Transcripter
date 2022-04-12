@@ -1,9 +1,10 @@
-__kernel void convolve_same(double *in, int inw, int inh, int filtern, 
+__kernel void convolve_same(__global double *in, int inw, int inh, int filtern, 
                             int pleft, int pright, int ptop, int pbot,
-                            int filterw, int filterh,
+                            int filterw, int filterh, int filtern,
                             int stridew, int strideh,
-                            int channels,
-                            double *bias, double *weights, double *out) {
+                            int channels, int ow, int oh,
+                            __global double *bias, __global double *weights,
+                            __global double *out) {
     /*
 Implementing
 
@@ -42,8 +43,10 @@ double sum = bias[filter];
             for (int l = j; l < filterh; l++) {
                 if (k + l * filterw > 0 && k + l * filterw < inw * inh)
                     sum += in[k + l * filterw + c * inw * inh] *
-                    weights[];
+                    weights[k + l * filterw + c * filterw * filterh];
             }
         }
     }
+    
+    out[ceil((double) (i + pleft) / stridew) + ceil((double) (j + ptop) * ow / strideh) + filtern * ow * oh] = sum;
 }
