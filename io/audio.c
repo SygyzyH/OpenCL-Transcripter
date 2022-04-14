@@ -106,7 +106,7 @@ int auinit() {
     
     if (!err) isauinit = 1;
     if (chkset(sets, DB))
-        printf("AUDIO_H: Initialized audio %s.\n", err? "UNSUCCESSFULY" : "successfuly");
+        printf("%s: Initialized audio %s.\n", __FILE__, err? "UNSUCCESSFULY" : "successfuly");
     
     return err;
 }
@@ -116,7 +116,7 @@ int austrt() {
     if (!isauinit) return 1;
     err = waveInStart(hWaveIn) != MMSYSERR_NOERROR;
     if (chkset(sets, DB))
-        printf("AUDIO_H: Device start %s\n", err? "UNSUCCESSFUL" : "successful");
+        printf("%s: Device start %s\n", __FILE__, err? "UNSUCCESSFUL" : "successful");
     
     return err;
 }
@@ -139,7 +139,7 @@ int aucln() {
     
     if (!err) isauinit = 0;
     if (chkset(sets, DB))
-        printf("AUDIO_H: Cleanup %s.\n", err? "UNSUCCESSFUL" : "successful");
+        printf("%s: Cleanup %s.\n", __FILE__, err? "UNSUCCESSFUL" : "successful");
     
     return err;
 }
@@ -175,7 +175,7 @@ int playwav(WAVC *file) {
     e += waveOutClose(hwo) != MMSYSERR_NOERROR;
     
     if (chkset(sets, DB))
-        printf("AUDIO_H: Playback %s.\n", e? "UNSUCCESSFUL" : "successful");
+        printf("%s: Playback %s.\n", __FILE__, e? "UNSUCCESSFUL" : "successful");
     
     return e;
 }

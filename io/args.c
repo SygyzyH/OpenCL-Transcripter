@@ -48,7 +48,7 @@ int hndl_set(int argc, char *argv[]) {
                 
                 case '?':
                 if (optopt == 'o')
-                    printf("Option %c requires an argument.\n", optopt);
+                    printf("%s: Option %c requires an argument.\n", __FILE__, optopt);
                 clrset(res, OK);
                 break;
                 
@@ -59,9 +59,9 @@ int hndl_set(int argc, char *argv[]) {
     }
     
     if (chkset(res, DB))
-        printf("ARGS_H: Argument parse %s\n", chkset(res, OK)? "successful" : "UNSUCCESSFUL");
+        printf("%s: Argument parse %s\n", __FILE__, chkset(res, OK)? "successful" : "UNSUCCESSFUL");
     if (out != NULL && chkset(res, DB))
-        printf("Outputting transcript to \"%s\"\n", out);
+        printf("%s: Outputting transcript to \"%s\"\n", __FILE__, out);
     
     return res;
 }

@@ -38,7 +38,7 @@ int ocinit() {
     // code is running, there must be a CPU to run it. 
     if (err == CL_DEVICE_NOT_FOUND) {
         if (chkset(sets, DB))
-            puts("OCLAPI_C: Failed to get a GPU device, running un-accelerated.");
+            printf("%s: Failed to get a GPU device, running un-accelerated.", __FILE__);
         clGetDeviceIDs(cpPlatform, CL_DEVICE_TYPE_CPU, 1, &device_id, NULL);
     }
     
@@ -46,7 +46,7 @@ int ocinit() {
     queue = clCreateCommandQueue(context, device_id, 0, &err);
     
     if (chkset(sets, DB))
-        puts("OCLAPI_C: Initialized OpenCL API successfuly.");
+        printf("%s: Initialized OpenCL API successfuly.", __FILE__);
     
     oclinit = true;
     
@@ -76,7 +76,7 @@ int occln() {
     clReleaseCommandQueue(queue);
     clReleaseContext(context);
     
-    if (chkset(sets, DB)) puts("OCLAPI_C: Cleanup successful.");
+    if (chkset(sets, DB)) printf("%s: Cleanup successful.", __FILE__);
     
     return OCLNO_ERR;
 }

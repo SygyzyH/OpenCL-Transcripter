@@ -38,7 +38,7 @@ int pwav(char *fname, WAVC **res, int nchn) {
     
     if (cur->hdr.channels == 2 && nchn) {
         if (chkset(sets, DB))
-            printf("WAV_H: Removing channel from \"%s\".\n", fname);
+            printf("%s: Removing channel from \"%s\".\n", __FILE__, fname);
         
         // Remove a channel
         unsigned char buf[4];
@@ -74,7 +74,7 @@ int pwav(char *fname, WAVC **res, int nchn) {
     
     if (chkset(sets, FB)) {
         if (chkset(sets, DB))
-            printf("WAV_H: Playing \"%s\"\n", fname);
+            printf("%s: Playing \"%s\"\n", __FILE__, fname);
         
         playwav(cur);
     }

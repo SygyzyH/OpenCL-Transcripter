@@ -6,10 +6,13 @@
 #include "io/oclapi.h"
 #include "math/math.h"
 #include "math/ml.h"
+#include "std.h"
 
 int init();
 
 int main(int argc, char *argv[]) {
+    int e;
+    
     sets = hndl_set(argc, argv);
     if (chkset(sets, DB))
         // If this occurs, DB must already be set.
@@ -18,11 +21,10 @@ int main(int argc, char *argv[]) {
                "True", chkset(sets, FB)? "True" : "False", chkset(sets, CS)? "True" : "False");
     
     // If OK flag is clr, abort.
-    if (!chkset(sets, OK)) return 1;
+    if (!chkset(sets, OK)) return EXIT_FAILURE;
     
     // Init
-    int e;
-    if ((e = init())) return e;
+    if (init()) return EXIT_FAILURE;
     
     // Testing OpenCL API
     const char *kernel_code =
@@ -119,7 +121,7 @@ int main(int argc, char *argv[]) {
     if (chkset(sets, DB))
         puts("Gracefully resolved!");
     
-    return 0;
+    return EXIT_SUCCESS;
 }
 
 int init() {
