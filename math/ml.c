@@ -6,6 +6,11 @@
 #include "math.h"
 #include "ml.h"
 
+/* 
+Internal ML functions, implemenation may vary in the future.
+ For the user end, use the function names to specify layer type 
+when making a machine.
+ */
 // TODO: Layer functions need to run on the GPU, most of 
 // this can be easily done using the math library.
 /*
@@ -476,6 +481,13 @@ int relu(double *unused0, int unused1, int unused2,
     return MLNO_ERR;
 }
 
+// Pass an input through a machine
+/*
+machine - machine to run the input on
+input - input matrix
+oputput - resulting output (memory allocated automaticly)
+returns 0 on success
+*/
 int forwardpass(Layer machine, Mat input, Mat **output) {
     Layer *p = &machine;
     Mat *datai = &input;
@@ -507,6 +519,11 @@ int forwardpass(Layer machine, Mat input, Mat **output) {
     return MLNO_ERR;
 }
 
+// Adds a layer to a machine
+/*
+machine - machine to add the layer to
+layer - layer to be added
+*/
 void addlayer(Layer **machine, Layer **newl) {
     Layer *p = *machine;
     

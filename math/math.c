@@ -12,6 +12,10 @@
 
 bool minit = false;
 
+// Initilize kerenels for math operations
+/*
+returns 0 on success
+*/
 int mainit() {
     int err;
     char *mprog = ldfile(MAT_PROG);
@@ -30,6 +34,18 @@ int mainit() {
     
     return MNO_ERR;
 }
+
+/* Math functions */
+/*
+a - first matrix data
+aw - matrix width
+ah - matrix height
+b - second matrix data or single value
+bw - matrix width
+bh - matrix height
+res - pointer to reslut (allocates needed memory automaticly)
+returns 0 on success
+*/
 
 int matmul(double *a, unsigned int aw, unsigned int ah,
            double *b, unsigned int bw, unsigned int bh, double **res) {
@@ -158,6 +174,14 @@ int stft(double *src, int sz, int framesize, int windowsize, int hopsize,
     return MNO_ERR;
 }
 
+// Convert amps to decibels
+/*
+src - data source
+sz - size of data
+topdb - top decible allowed
+op - operation type
+returns 0 on success
+*/
 int amptodb(double **src, int sz, double topdb, int op) {	
 	double *dsrc = *src;
 	
@@ -197,14 +221,37 @@ int amptodb(double **src, int sz, double topdb, int op) {
     return MNO_ERR;
 }
 
+// Converts frequency to mel
+/*
+f - frequency
+returns frequency in mel
+*/
 double ftomel(double f) {
     return 2595.0 * log10(1.0 + (f / 700.0));
 }
 
+// Converts mel to frequency
+/*
+mel - mel
+returns mel in frequency
+*/
 double meltof(double mel) {
     return 700 * (pow(10, mel / 2595) - 1);
 }
 
+// Make mel spectogram
+/*
+src - data source
+sz - size of data
+framesize - size of each frame in stft
+windowsize - size of each window in stft (hann windowing by default)
+hopsize - size of each hop in stft
+bands - number of bands
+fstart - starting frequency of filters
+fend - ending frequency of filters
+res - resulting spectogram (memory automaticly allocated)
+returns 0 on success
+*/
 int melspec(double *src, int sz, int framesize, int windowsize, int hopsize, int bands,
             double fstart, double fend, double **res) {
     int e = 0;
@@ -231,8 +278,7 @@ int melspec(double *src, int sz, int framesize, int windowsize, int hopsize, int
     double spacing = (double) (maxmel - minmel) / (bands - 1);
     
     // Transcribed from Apple
-    /* https://developer.apple.com/documentation/accelerate/computing_the_mel_spectrum_using_linear_algebra
-   */
+    /* https://developer.apple.com/documentation/accelerate/computing_the_mel_spectrum_using_linear_algebra */
     int *filters = (int *) malloc(sizeof(double) * bands);
     // 'i' goes up to maxmel + spacing to include the last iteration
     for (double i = minmel; i < maxmel + spacing; i += spacing)

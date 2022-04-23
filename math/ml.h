@@ -44,6 +44,8 @@ int dropout(double *prob, int unused0, int unused1,
             double *in, int iw, int ih, Mat **out);
 int bnorm(double *params, int paramsw, int unused0,
           double *in, int inw, int inh, Mat **out);
+int zcenter(double *params, int paramsw, int unused0,
+            double *in, int inw, int inh, Mat **out);
 int fullyc(double *params, int paramsw, int unused0,
            double *in, int inw, int inh, Mat **out);
 int maxpool(double *params, int paramsw, int unused0,

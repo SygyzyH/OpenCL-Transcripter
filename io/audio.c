@@ -2,6 +2,7 @@
 #include "pwave.h"
 #include "args.h"
 #include "../math/math.h"
+#include "../std.h"
 
 HWAVEIN hWaveIn;
 HWAVEOUT hWaveOut;
@@ -15,6 +16,7 @@ int isauinit = 0;
 void CALLBACK whndl(HWAVEIN hwi, UINT uMsg, DWORD dwInstance, DWORD dwParam1, DWORD dwParam2);
 void prntbr();
 
+// Prints the bar at the bottom of the CLI
 void prntbr() {
     // Short int minimal limit
     short int max = -32768;
@@ -31,6 +33,7 @@ void prntbr() {
     double dmax = dmaxa[1];
     free(dmaxa);
     
+    // Prepare string
     char block[CLICAP + 1];
     for (int i = 0; i < CLICAP; i++) {
         if (i < (int) dmax)
@@ -44,6 +47,15 @@ void prntbr() {
     fflush(stdout);
 }
 
+// Callback function to handle emptying the buffer when its filled
+/*
+Header description in Microsoft docs. loosly speaking,
+hwi - handle of the audio device
+uMsg - type of the call, usually WIM_INIT or WIM_DATA or WIM_CLEAN
+dwInstance - unused
+dwParam1 - unused
+dwParam2 - unused
+*/
 void CALLBACK whndl(HWAVEIN hwi, UINT uMsg, DWORD dwInstance, DWORD dwParam1, DWORD dwParam2) {
     /*
 TODO: I was right all along. Like mentioned in the MSDN Docs,
@@ -70,6 +82,10 @@ A bandaid fix is to implement a mutex, however this mutex
     waveInAddBuffer(hWaveIn, &header[ibuf], sizeof(WAVEHDR));
 }
 
+// Initialize things for winapi
+/*
+returns 0 on success
+*/
 int auinit() {
     int err = 0;
     
@@ -105,12 +121,17 @@ int auinit() {
     err += waveInAddBuffer(hWaveIn, &header[0], sizeof(WAVEHDR)) != MMSYSERR_NOERROR;
     
     if (!err) isauinit = 1;
+    
     if (chkset(sets, DB))
-        printf("%s: Initialized audio %s.\n", __FILE__, err? "UNSUCCESSFULY" : "successfuly");
+        putsc(!err, "Initialized audio successfully.", "Initialized audio unsuccessfuly.");
     
     return err;
 }
 
+// Start listening to device
+/*
+returns 0 on success
+*/
 int austrt() {
     int err;
     if (!isauinit) return 1;
@@ -121,6 +142,10 @@ int austrt() {
     return err;
 }
 
+// Cleanup winapi
+/*
+returns 0 on success
+*/
 int aucln() {
     int err = 0;
     
@@ -144,6 +169,11 @@ int aucln() {
     return err;
 }
 
+// Play .wav file using winapi
+/*
+file - internal custom header for .wav files
+returns 0 on success
+*/
 int playwav(WAVC *file) {
     int e = 0;
     

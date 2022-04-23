@@ -7,6 +7,13 @@
 #include "args.h"
 #include "../math/math.h"
 
+// Read .wav file, prepare it, and play it using winapi
+/*
+fname - file name of the .wav file to be played
+res - result of the parsing header. Needs to be passed on
+nchn - number of channels requested, either 1 or 2. If channel size of the file doesn't match, the buffer will be modified to match
+returns 0 on success
+*/
 int pwav(char *fname, WAVC **res, int nchn) {
     FILE *file = fopen(fname, "rb");
     if (file == NULL) return WOPEN_ERR;
@@ -82,6 +89,12 @@ int pwav(char *fname, WAVC **res, int nchn) {
     return WNO_ERR;
 }
 
+// Convert WAVEFORMATEXX (winapi) to WAVC (custom) so that a .wav file can be parsed
+/*
+format - winapi formmated header
+data - raw PCM data
+dsize - size of data
+*/
 WAVC* frmtowav(WAVEFORMATEX format, unsigned char *data, unsigned int dsize) {
     WAVC *res = (WAVC *) malloc(sizeof(WAVC));
     

@@ -3,12 +3,19 @@
 // #include <unistd.h>
 
 #include "../dep/getopt.h"
+#include "../std.h"
 #include "args.h"
 
 #define HELP "TODO: write help"
 
 int sets = 0;
 
+// Gets arguments from CLI, setting up the settings variable according to args.
+/*
+argc - argument count
+argv - pointers to strings (arguments)
+returns 0 on success
+*/
 int hndl_set(int argc, char *argv[]) {
     int opt;
     char *out = NULL;
@@ -47,8 +54,7 @@ int hndl_set(int argc, char *argv[]) {
                 break;
                 
                 case '?':
-                if (optopt == 'o')
-                    printf("%s: Option %c requires an argument.\n", __FILE__, optopt);
+                printfc(optopt == 'o', "Option %c requires an argument.\n", optopt);
                 clrset(res, OK);
                 break;
                 
@@ -58,28 +64,70 @@ int hndl_set(int argc, char *argv[]) {
         }
     }
     
-    if (chkset(res, DB))
-        printf("%s: Argument parse %s\n", __FILE__, chkset(res, OK)? "successful" : "UNSUCCESSFUL");
-    if (out != NULL && chkset(res, DB))
-        printf("%s: Outputting transcript to \"%s\"\n", __FILE__, out);
+    putsc(chkset(res, OK), "Argument parse successful.");
+    putsc(!chkset(res, OK), "Argument parse unsuccessful.");
+    
+    printfc(out != NULL && chkset(res, DB), "Outputting transcript to \"%s\"\n", out);
     
     return res;
 }
 
-char* ldfile(char const *filepath) {
+// Reads file as text
+/*
+filepath - string for filepath
+returns string of file contants
+*/
+char *ldfile(char const *filepath) {
     FILE *file = fopen(filepath, "rb");
     if (file == NULL)
         perror("File read failed: ");
     
-    int file_size;
-    char *text;
-    
     fseek(file, 0L, SEEK_END);
-    file_size = ftell(file);
+    int file_size = ftell(file);
     rewind(file);
-    text = (char *) malloc(sizeof(char) * (file_size + 1));
+    
+    char *text = (char *) malloc(sizeof(char) * (file_size + 1));
+    
     fread(text, sizeof(char), file_size, file);
     text[file_size] = '\0';
+    
     fclose(file);
+    
     return text;
 }
+
+// Reads binary file as double
+/*
+filepath - path to file
+res - pointer to result to be saved (will be allocated)
+len - pointer to length of the result
+returns 0 on success
+*/
+int ldbind(char const *filepath, double **res, int *len) {
+    FILE *file = fopen(filepath, "rb");
+    if (file == NULL) {
+        printf("Failed to read \"%s\": ", filepath);
+        perror("");
+        return 1;
+    }
+    
+    fseek(file, 0L, SEEK_END);
+    *len = ftell(file);
+    if (*len % sizeof(double)) {
+        printf("Misaligned binary at \"%s\".\n", filepath);
+        return 1;
+    }
+    
+    *len /= sizeof(double);
+    
+    rewind(file);
+    
+    *res = (double *) malloc(sizeof(double) * (*len));
+    
+    fread(*res, sizeof(double), *len, file);
+    
+    fclose(file);
+    
+    return 0;
+}
+// fwrite(fid, trainedNet.Layers(1, 1).AverageImage, 'double');

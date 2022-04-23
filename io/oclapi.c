@@ -17,6 +17,7 @@ Maybe also safe calls to run_kernel? (type checking, variable count checks, NULL
 #include <stdbool.h>
 
 #include "args.h"
+#include "../std.h"
 #include "oclapi.h"
 
 cl_platform_id cpPlatform;
@@ -28,6 +29,10 @@ bool oclinit = false;
 
 Klist *kernels = NULL;
 
+// Initialize OpenCL and prepare registery
+/*
+returns 0 on success
+*/
 int ocinit() {
     int err;
     
@@ -37,22 +42,24 @@ int ocinit() {
     // fail, since the docs state the CPU is the host device - meaning, if this
     // code is running, there must be a CPU to run it. 
     if (err == CL_DEVICE_NOT_FOUND) {
-        if (chkset(sets, DB))
-            printf("%s: Failed to get a GPU device, running un-accelerated.", __FILE__);
+        putsc(chkset(sets, DB), "Failed to get a GPU device, running un-accelerated.");
         clGetDeviceIDs(cpPlatform, CL_DEVICE_TYPE_CPU, 1, &device_id, NULL);
     }
     
     context = clCreateContext(0, 1, &device_id, NULL, NULL, &err);
     queue = clCreateCommandQueue(context, device_id, 0, &err);
     
-    if (chkset(sets, DB))
-        printf("%s: Initialized OpenCL API successfuly.", __FILE__);
+    putsc(chkset(sets, DB), "Initialized OpenCL API successfuly.");
     
     oclinit = true;
     
     return OCLNO_ERR;
 }
 
+// Cleanup registery
+/*
+returns 0 on success
+*/
 int occln() {
     if (!oclinit) return OCLUNINITIALIZED;
     
@@ -76,11 +83,18 @@ int occln() {
     clReleaseCommandQueue(queue);
     clReleaseContext(context);
     
-    if (chkset(sets, DB)) printf("%s: Cleanup successful.", __FILE__);
+    putsc(chkset(sets, DB), "Cleanup successful.");
     
     return OCLNO_ERR;
 }
 
+// Register a kerenel so it can be run
+/*
+src - source code string
+kerneln - number of kernels in source code
+... - string names of the kernels in source code
+returns 0 on success
+*/
 /*
 Before a function is ran using the ocl api, it must first be
 registered. The user needs to supply a source program and any
@@ -155,6 +169,15 @@ int register_from_src(const char **src, int kerneln, ...) {
     return OCLNO_ERR;
 }
 
+// Run registered kernel
+/*
+name - name of the kernel
+wdim - number of dimensions to run the kerenl in the GPU (typically between 1 to 3, see OpenCL docs)
+gsz - array of sizes for the global run size. Array length should be dim (see OpenCL docs) 
+lsz - array of sizes for the local run size. Array length should be dim (see OpenCL docs)
+... - parameters for the function. After every pointer there must follow: size of the pointer, operation flags
+returns 0 on success
+*/
 int run_kernel(const char *name, int wdim, size_t *gsz, size_t *lsz, ...) {
     if (!oclinit) return OCLUNINITIALIZED;
     int err;
