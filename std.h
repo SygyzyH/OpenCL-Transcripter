@@ -14,7 +14,12 @@
 #error "C Standart too low (Required C99 or above)"
 #endif
 
-// Guarentee bool is defined
+#ifdef __GNUC__
+#define INLINE static inline __attribute__((always_inline))
+#else
+#define INLINE static inline
+#endif
+
 #include <stdbool.h>
 
 #ifdef DEBUG

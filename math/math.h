@@ -19,7 +19,7 @@ enum DB_OPTYPE { SCALE_MAX, SCALE_ONE, SCALE_FIRST };
 enum MATH_ERR { MNO_ERR=0, MINVALID_ARG, MZERO_DIV, MSMALL_BUF, MUNINITIALIZED };
 
 #define stftw(framesize) ceil(framesize / 2 + 1)
-#define stfth(sz, framesize, hopsize) ceil(((sz - framesize) / hopsize) + 1);
+#define stfth(sz, framesize, hopsize) ceil(((sz - framesize) / hopsize) + 1)
 #define stftwh(sz, framesize, hopsize, w, h) { *w = stftw(framesize); *h = stfth(sz, framesize, hopsize); } 
 
 int amptodb(double **src, int sz, double topdb, int op);

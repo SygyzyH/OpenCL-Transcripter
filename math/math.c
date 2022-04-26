@@ -65,6 +65,8 @@ int matmul(double *a, unsigned int aw, unsigned int ah,
         return MINVALID_ARG;
     }
     
+    puts("456");
+    
     size_t gz[] = { az, bz };
     
     double *r = (double *) malloc(sizeof(double) * az * bz);
@@ -146,6 +148,17 @@ int matadds(double *a, unsigned int aw, unsigned int ah, double b, double **res)
     return MNO_ERR;
 }
 
+// Compute the stft
+/*
+src - source data
+sz - size of the source data
+framesize - size of each frame
+windowsize - size of the windowing function
+hopsize - size of each hop between DFTs
+res - result (automaticly allocated)
+op - either 
+returns 0 on success
+*/
 int stft(double *src, int sz, int framesize, int windowsize, int hopsize,
          double **res, int op) {
     if (!minit) return MUNINITIALIZED;
@@ -164,10 +177,10 @@ int stft(double *src, int sz, int framesize, int windowsize, int hopsize,
     
     double *r = (double *) malloc(sizeof(double) * fbins * frames);
     
-    size_t gz[] = {frames, fbins};
+    size_t gz[] = { frames, fbins };
     
     run_kernel("stft", 2, gz, NULL, src, sz, OCLREAD | OCLCPY,
-               framesize, windowsize, hopsize, r, fbins * frames, OCLWRITE | OCLCPY);
+               framesize, windowsize, hopsize, r, fbins * frames, OCLWRITE | OCLOUT);
     
     *res = r;
     
@@ -256,6 +269,8 @@ int melspec(double *src, int sz, int framesize, int windowsize, int hopsize, int
             double fstart, double fend, double **res) {
     int e = 0;
     
+    if (framesize < 1 || windowsize < 1 || hopsize < 1 || bands < 1) return MINVALID_ARG;
+    
     int fbins, frames;
 	stftwh(sz, framesize, hopsize, &fbins, &frames);
     
@@ -264,7 +279,7 @@ int melspec(double *src, int sz, int framesize, int windowsize, int hopsize, int
     /* Extract STFT */
     
     double *ft;
-    if ((e = stft(src, sz, framesize, windowsize, hopsize, &ft, MAGSQ)))
+    if ((e = stft(src, sz, framesize, windowsize, hopsize, &ft, MAGSQ))) 
         return e;
     
     /* Convert amplitude to Decibels */
@@ -282,7 +297,7 @@ int melspec(double *src, int sz, int framesize, int windowsize, int hopsize, int
     int *filters = (int *) malloc(sizeof(double) * bands);
     // 'i' goes up to maxmel + spacing to include the last iteration
     for (double i = minmel; i < maxmel + spacing; i += spacing)
-        filters[(int) i] = (int) fbins * meltof(i) / fend;
+        filters[(int) ((i - minmel) / spacing)] = (int) fbins * meltof(i) / fend;
     
     // TODO: This should run on the GPU
     /* Create triangular filters */
@@ -319,7 +334,9 @@ int melspec(double *src, int sz, int framesize, int windowsize, int hopsize, int
     
     /* Apply filter bank to signal */
     
-    matmul(fban, fbins, frames, ft, fbins, bands, res);
+    // TODO: There is a mistake here. fban should be rotated (?)
+    matmul(fban, bands, fbins, ft, fbins, frames, res);
+    puts("123");
     
     /* Cleanup */
     

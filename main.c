@@ -58,236 +58,50 @@ softmax
     
     machine->params = mAvgImg;
     
-    // First rep
-    Layer *newl = (Layer *) malloc(sizeof(Layer));
-    newl->inw = -1;
-    newl->inh = -1;
-    newl->transform = conv2d;
-    newl->next = NULL;
+    mklayer(&machine, -1, -1, conv2d, NULL, "./machine/conv1.bin");
+    mklayer(&machine, -1, -1, bnorm, NULL, "./machine/bnorm1.bin");
+    mklayer(&machine, -1, -1, relu, NULL, NULL);
+    mklayer(&machine, -1, -1, maxpool, NULL, "./machine/maxpool1.bin");
     
-    Mat newlParam1;
-    newlParam1.height = 1;
-    safe(ldbind("./machine/conv1.bin", &newlParam1.data, &newlParam1.width));
-    newl->params = newlParam1;
+    mklayer(&machine, -1, -1, conv2d, NULL, "./machine/conv2.bin");
+    mklayer(&machine, -1, -1, bnorm, NULL, "./machine/bnorm2.bin");
+    mklayer(&machine, -1, -1, relu, NULL, NULL);
+    mklayer(&machine, -1, -1, maxpool, NULL, "./machine/maxpool2.bin");
     
-    addlayer(&machine, &newl);
+    mklayer(&machine, -1, -1, conv2d, NULL, "./machine/conv3.bin");
+    mklayer(&machine, -1, -1, bnorm, NULL, "./machine/bnorm3.bin");
+    mklayer(&machine, -1, -1, relu, NULL, NULL);
+    mklayer(&machine, -1, -1, maxpool, NULL, "./machine/maxpool3.bin");
     
-    newl = (Layer *) malloc(sizeof(Layer));;
-    newl->inw = -1;
-    newl->inh = -1;
-    newl->transform = bnorm;
-    newl->next = NULL;
+    mklayer(&machine, -1, -1, conv2d, NULL, "./machine/conv4.bin");
+    mklayer(&machine, -1, -1, bnorm, NULL, "./machine/bnorm4.bin");
+    mklayer(&machine, -1, -1, relu, NULL, NULL);
     
-    Mat newlParam2;
-    newlParam2.height = 1;
-    safe(ldbind("./machine/bnorm1.bin", &newlParam2.data, &newlParam2.width));
-    newl->params = newlParam2;
+    mklayer(&machine, -1, -1, conv2d, NULL, "./machine/conv5.bin");
+    mklayer(&machine, -1, -1, bnorm, NULL, "./machine/bnorm5.bin");
+    mklayer(&machine, -1, -1, relu, NULL, NULL);
+    mklayer(&machine, -1, -1, maxpool, NULL, "./machine/maxpool4.bin");
     
-    addlayer(&machine, &newl);
+    mklayer(&machine, -1, -1, dropout, NULL, "./machine/dropout.bin");
+    mklayer(&machine, -1, -1, fullyc, NULL, "./machine/fullyc.bin");
+    mklayer(&machine, -1, -1, softmax, NULL, NULL);
     
-    newl = (Layer *) malloc(sizeof(Layer));;
-    newl->inw = -1;
-    newl->inh = -1;
-    newl->transform = relu;
-    newl->next = NULL;
+    /* Testing */
     
-    addlayer(&machine, &newl);
+    WAVC *wav;
+    pwav("./testing/dataset/Hebrew Build Converted/lo/temp1p3.wav", &wav, 2);
+    double *stftinp;
+    wavtod(wav, &stftinp);
+    printf("%d Samples\n", wav->samples);
+    for (int i = 0; i < wav->samples / 100; i++) printfu("%lf, ", stftinp[i]); putsu();
     
-    newl = (Layer *) malloc(sizeof(Layer));;
-    newl->inw = -1;
-    newl->inh = -1;
-    newl->transform = maxpool;
-    newl->next = NULL;
+    double *minp;
+    int framesize = (int) wav->hdr.samplerate * 0.025;
+    int hopsize = (int) wav->hdr.samplerate * 0.01;
+    // TODO: window normalization, fftlen
+    printf("e: %d\n", melspec(stftinp, wav->samples, framesize, framesize, hopsize, 40, 50, 7000, &minp));
     
-    Mat newlParam4;
-    newlParam4.height = 1;
-    safe(ldbind("./machine/maxpool1.bin", &newlParam4.data, &newlParam4.width));
-    newl->params = newlParam2;
-    
-    addlayer(&machine, &newl);
-    
-    // Second rep
-    newl = (Layer *) malloc(sizeof(Layer));;
-    newl->inw = -1;
-    newl->inh = -1;
-    newl->transform = conv2d;
-    newl->next = NULL;
-    
-    Mat newlParam5;
-    newlParam5.height = 1;
-    safe(ldbind("./machine/conv2.bin", &newlParam5.data, &newlParam5.width));
-    newl->params = newlParam5;
-    
-    addlayer(&machine, &newl);
-    
-    newl = (Layer *) malloc(sizeof(Layer));;
-    newl->inw = -1;
-    newl->inh = -1;
-    newl->transform = bnorm;
-    newl->next = NULL;
-    
-    Mat newlParam6;
-    newlParam6.height = 1;
-    safe(ldbind("./machine/bnorm2.bin", &newlParam6.data, &newlParam6.width));
-    newl->params = newlParam6;
-    
-    addlayer(&machine, &newl);
-    
-    newl = (Layer *) malloc(sizeof(Layer));;
-    newl->inw = -1;
-    newl->inh = -1;
-    newl->transform = relu;
-    newl->next = NULL;
-    
-    addlayer(&machine, &newl);
-    
-    newl = (Layer *) malloc(sizeof(Layer));;
-    newl->inw = -1;
-    newl->inh = -1;
-    newl->transform = maxpool;
-    newl->next = NULL;
-    
-    Mat newlParam7;
-    newlParam7.height = 1;
-    safe(ldbind("./machine/maxpool2.bin", &newlParam7.data, &newlParam7.width));
-    newl->params = newlParam7;
-    
-    addlayer(&machine, &newl);
-    
-    // Third rep
-    newl = (Layer *) malloc(sizeof(Layer));;
-    newl->inw = -1;
-    newl->inh = -1;
-    newl->transform = conv2d;
-    newl->next = NULL;
-    
-    Mat newlParam8;
-    newlParam8.height = 1;
-    safe(ldbind("./machine/conv3.bin", &newlParam8.data, &newlParam8.width));
-    newl->params = newlParam8;
-    
-    addlayer(&machine, &newl);
-    
-    newl = (Layer *) malloc(sizeof(Layer));;
-    newl->inw = -1;
-    newl->inh = -1;
-    newl->transform = bnorm;
-    newl->next = NULL;
-    
-    Mat newlParam9;
-    newlParam9.height = 1;
-    safe(ldbind("./machine/bnorm3.bin", &newlParam9.data, &newlParam9.width));
-    newl->params = newlParam9;
-    
-    addlayer(&machine, &newl);
-    
-    newl = (Layer *) malloc(sizeof(Layer));;
-    newl->inw = -1;
-    newl->inh = -1;
-    newl->transform = relu;
-    newl->next = NULL;
-    
-    addlayer(&machine, &newl);
-    
-    newl = (Layer *) malloc(sizeof(Layer));;
-    newl->inw = -1;
-    newl->inh = -1;
-    newl->transform = maxpool;
-    newl->next = NULL;
-    
-    Mat newlParam10;
-    newlParam10.height = 1;
-    safe(ldbind("./machine/maxpool3.bin", &newlParam10.data, &newlParam10.width));
-    newl->params = newlParam10;
-    
-    addlayer(&machine, &newl);
-    
-    // Fourth rep
-    newl = (Layer *) malloc(sizeof(Layer));;
-    newl->inw = -1;
-    newl->inh = -1;
-    newl->transform = conv2d;
-    newl->next = NULL;
-    
-    Mat newlParam11;
-    newlParam11.height = 1;
-    safe(ldbind("./machine/conv4.bin", &newlParam11.data, &newlParam11.width));
-    newl->params = newlParam11;
-    
-    addlayer(&machine, &newl);
-    
-    newl = (Layer *) malloc(sizeof(Layer));;
-    newl->inw = -1;
-    newl->inh = -1;
-    newl->transform = bnorm;
-    newl->next = NULL;
-    
-    Mat newlParam12;
-    newlParam12.height = 1;
-    safe(ldbind("./machine/bnorm4.bin", &newlParam12.data, &newlParam12.width));
-    newl->params = newlParam12;
-    
-    addlayer(&machine, &newl);
-    
-    newl = (Layer *) malloc(sizeof(Layer));;
-    newl->inw = -1;
-    newl->inh = -1;
-    newl->transform = relu;
-    newl->next = NULL;
-    
-    addlayer(&machine, &newl);
-    
-    newl = (Layer *) malloc(sizeof(Layer));;
-    newl->inw = -1;
-    newl->inh = -1;
-    newl->transform = maxpool;
-    newl->next = NULL;
-    
-    Mat newlParam13;
-    newlParam13.height = 1;
-    safe(ldbind("./machine/maxpool4.bin", &newlParam13.data, &newlParam13.width));
-    newl->params = newlParam13;
-    
-    addlayer(&machine, &newl);
-    
-    // dropout
-    newl = (Layer *) malloc(sizeof(Layer));;
-    newl->inw = -1;
-    newl->inh = -1;
-    newl->transform = dropout;
-    newl->next = NULL;
-    
-    Mat newlParam14;
-    newlParam14.height = 1;
-    safe(ldbind("./machine/dropout.bin", &newlParam14.data, &newlParam14.width));
-    
-    newl->params = newlParam14;
-    
-    addlayer(&machine, &newl);
-    
-    // fullycon
-    newl = (Layer *) malloc(sizeof(Layer));;
-    newl->inw = -1;
-    newl->inh = -1;
-    newl->transform = fullyc;
-    newl->next = NULL;
-    
-    Mat newlParam15;
-    newlParam15.height = 1;
-    safe(ldbind("./machine/fullycon.bin", &newlParam15.data, &newlParam15.width));
-    
-    newl->params = newlParam15;
-    
-    addlayer(&machine, &newl);
-    
-    // softmax
-    newl = (Layer *) malloc(sizeof(Layer));;
-    newl->inw = -1;
-    newl->inh = -1;
-    newl->transform = softmax;
-    newl->next = NULL;
-    
-    addlayer(&machine, &newl);
+    for (int i = 0; i < 40; i++) printfu("%lf, ", minp[i]); puts();
     
     /* Main loop */
     

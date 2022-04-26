@@ -161,6 +161,11 @@ int register_from_src(const char **src, int kerneln, ...) {
                 puts("INVALID ARG");
                 return OCLINVALID_ARG;
             }
+            
+            // Initilize values reset
+            k->argv[argument]._dsize = 0;
+            k->argv[argument]._flags = 0;
+            k->argv[argument]._host_data = NULL;
         }
     }
     
@@ -268,7 +273,6 @@ int run_kernel(const char *name, int wdim, size_t *gsz, size_t *lsz, ...) {
         }
         
         err = clSetKernelArg(k->kernel, i, device_dsize, data);
-        printf("e: %d\n", err);
     }
     
     va_end(valist);

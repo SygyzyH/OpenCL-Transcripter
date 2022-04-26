@@ -3,11 +3,13 @@
 #ifndef ML_H
 #define ML_H
 
+#include "../std.h"
+
 #define unpkmat(mat) (mat).data, (mat).width, (mat).height
 #define unpkmatp(mat) (mat)->data, (mat)->width, (mat)->height
 
 enum ML_ERR { MLNO_ERR=0, MLINVALID_ARG, MLLAYER_ERR, MLSIZE_MISMATCH };
-enum PAD_TYPE { SAME, NONE };
+enum PAD_TYPE { SAME=0, NONE=1 };
 
 typedef struct {
     double *data;
@@ -52,5 +54,22 @@ int maxpool(double *params, int paramsw, int unused0,
             double *in, int inw, int inh, Mat **out);
 int conv2d(double *params, int paramsw, int unused0,
            double *in, int inw, int inh, Mat **out);
+
+INLINE void mklayer(Layer **machine, int inw, int inh, void *transform, Layer *next, const char *path) {
+    Layer *newl = (Layer *) malloc(sizeof(Layer));
+    newl->inw = inw;
+    newl->inh = inh;
+    newl->transform = transform;
+    newl->next = next;
+    
+    if (path != NULL) {
+        Mat newlParam;
+        newlParam.height = 1;
+        ldbind(path, &newlParam.data, &newlParam.width);
+        newl->params = newlParam;
+    }
+    
+    addlayer(machine, &newl);
+}
 
 #endif //ML_H

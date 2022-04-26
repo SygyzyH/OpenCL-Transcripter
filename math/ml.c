@@ -50,7 +50,7 @@ Parameters order:
 - pad
 - channels
 
-filtern * filterw * filterh times:
+filtern * filterw * filterh * channels times:
 - weights
 
 filtern times:
@@ -527,7 +527,7 @@ layer - layer to be added
 void addlayer(Layer **machine, Layer **newl) {
     Layer *p = *machine;
     
-    while (p != NULL)
+    while (p->next != NULL)
         p = p->next;
     
     (*newl)->prev = p;

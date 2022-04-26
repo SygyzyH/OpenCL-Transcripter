@@ -7,18 +7,19 @@
 #include "args.h"
 #include "../math/math.h"
 
-// Read .wav file, prepare it, and play it using winapi
+// Read .wav file, prepare it, and return its data to user. 
+// (Will also play it if debug flag is set)
 /*
 fname - file name of the .wav file to be played
-res - result of the parsing header. Needs to be passed on
-nchn - number of channels requested, either 1 or 2. If channel size of the file doesn't match, the buffer will be modified to match
+res - result of the parsing. Automaticly allocated
+nchn - number of channels requested, either 1 or 2. If channel size of the file doesn't match, the data will be modified to match
 returns 0 on success
 */
 int pwav(char *fname, WAVC **res, int nchn) {
     FILE *file = fopen(fname, "rb");
     if (file == NULL) return WOPEN_ERR;
     
-    int osize;
+    uint32_t osize;
     fseek(file, 4, SEEK_CUR);
     fread(&osize, sizeof(int), 1, file);
     fseek(file, 4, SEEK_CUR);
@@ -28,13 +29,29 @@ int pwav(char *fname, WAVC **res, int nchn) {
     
     fread(&cur->hdr, sizeof(WAVCH), 1, file);
     
+    // Find DATA or FLLR header
+    char *tdchnkh = (char *) malloc(5);
+    memcpy(tdchnkh, cur->hdr.dchunkh, 4);
+    tdchnkh[4] = 0;
+    // TODO: Not 100% this is on spec, since permutations are also included (such as "LRfl")
+    // Should be good enough though
+    while (strlen(tdchnkh) == 0 || !strstr("DATAdataFLLRfllr", tdchnkh)) {
+        fseek(file, -3, SEEK_CUR);
+        
+        // If reached EOF or otherwise an error has occured, return error 
+        if (fread(&cur->hdr.dchunkh, sizeof(char), 4, file) != 4) return WOPEN_ERR;
+        memcpy(tdchnkh, cur->hdr.dchunkh, 4);
+    } free(tdchnkh);
+    
+    fread(&cur->hdr.dsize, sizeof(cur->hdr.dsize), 1, file);
+    
     // Non-PCM files are not supported
     if (cur->hdr.ftype != 1) return WNOT_SUPPORTED;
     // Too many channels
     if (cur->hdr.channels > 2) return WNOT_SUPPORTED;
     
     cur->osize = osize;
-    cur->samples = 8 * cur->hdr.dsize / cur->hdr.channels * cur->hdr.bitspsample;
+    cur->samples = 8 * cur->hdr.dsize / (cur->hdr.channels * cur->hdr.bitspsample);
     cur->ssize = cur->hdr.channels * cur->hdr.bitspsample / 8;
     cur->data =  (unsigned char *) malloc(cur->samples * cur->ssize);
     // Since data aligment is irrelevent, its more efficient
@@ -119,4 +136,34 @@ WAVC* frmtowav(WAVEFORMATEX format, unsigned char *data, unsigned int dsize) {
     res->data = data;
     
     return res;
+}
+
+// Converts native wav file data to array of doubles
+/*
+src - source wav file
+res - result (allocated automaticly, sized src->samples)
+returns 0 on success
+*/
+int wavtod(WAVC *src, double **res) {
+    int bbs = (int) (src->hdr.bitspsample / 8);
+    
+    // Check if size is "operateable" on this arch
+    if (bbs != sizeof(short int) && bbs != sizeof(int) && bbs != sizeof(long int) && bbs != sizeof(long long int)) return WNOT_SUPPORTED;
+    
+    double *r = (double *) malloc(sizeof(double) * src->samples);
+    
+    for (int i = 0; i < src->samples; i++) {
+        if (bbs == sizeof(short int))
+            r[i] = (double) ((short int *) src->data)[i];
+        else if (bbs == sizeof(int))
+            r[i] = (double) ((int *) src->data)[i];
+        else if (bbs == sizeof(long int))
+            r[i] = (double) ((long int *) src->data)[i];
+        else if (bbs == sizeof(long long int))
+            r[i] = (double) ((long long int *) src->data)[i];
+    }
+    
+    *res = r;
+    
+    return WNO_ERR;
 }

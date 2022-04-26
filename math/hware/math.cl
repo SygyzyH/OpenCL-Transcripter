@@ -3,7 +3,7 @@ inline double win(int x, int windowsize) {
     return pow(sin(M_PI * x / windowsize), 2);
 }
 
-__kernel void stft(__global double *src, int framesize, int windowsize, int hopsize, __global double *res, int op) {
+__kernel void stft(__global double *src, int framesize, int windowsize, int hopsize, __global double *res) {
 	int fbins = (int) framesize / 2 + 1;
 
 	int frame = get_global_id(0);
