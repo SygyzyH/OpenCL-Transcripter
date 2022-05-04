@@ -155,7 +155,6 @@ int wavtod(WAVC *src, double **res, int norm) {
     // long long int will always fit, since its unsigned and im checking for
     // signed.
     int maxsig = (int) (1LL << bps * 8) / 2;
-    printf("max signed int of size %d is %d?\n", bps * 8, maxsig);
     
     for (int i = 0; i < src->samples; i++) {
         if (bps == sizeof(short int))

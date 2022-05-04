@@ -34,7 +34,7 @@ typedef struct {
 int amptodb(double **src, int sz, double topdb, int op);
 int stft(double *src, int sz, int framesize, int windowsize,
          int fftlen, int hopsize, int sides, Mat **res);
-int melspec(double *src, int sz, int framesize, int windowsize, int fftlen,
+int melspec(double *src, int sz, int fs, int framesize, int windowsize, int fftlen, 
             int hopsize, int bands, double fstart, double fend, Mat **res);
 
 int matmul(double *a, unsigned int aw, unsigned int ah, 

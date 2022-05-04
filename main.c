@@ -101,8 +101,8 @@ softmax
     printf("samplerate: %d, framesize: %d, hopsize: %d\n", wav->hdr.samplerate, framesize, hopsize);
     
     // TODO: window normalization, fftlen
-    stft(stftinp, wav->samples, framesize, framesize, 512, hopsize, TWO_SIDED, &minp);
-    //melspec(stftinp, wav->samples, framesize, framesize, hopsize, 40, 50, 7000, &minp);
+    //stft(stftinp, wav->samples, framesize, framesize, 512, hopsize, TWO_SIDED, &minp);
+    melspec(stftinp, wav->samples, wav->hdr.samplerate, framesize, framesize, 512, hopsize, 32, 0, 8000, &minp);
     //printf("stft height should be at %lf once fft length is implemented\n", 
     //stfth(wav->samples, 512, hopsize));
     //double stfttest[128]; for (int i = 0; i < 128; i++) stfttest[i] = 1;

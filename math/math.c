@@ -288,7 +288,7 @@ fend - ending frequency of filters
 res - resulting spectogram (memory automaticly allocated)
 returns 0 on success
 */
-int melspec(double *src, int sz, int framesize, int windowsize, int fftlen, 
+int melspec(double *src, int sz, int fs, int framesize, int windowsize, int fftlen, 
             int hopsize, int bands, double fstart, double fend, Mat **res) {
     int e = 0;
     
@@ -311,54 +311,60 @@ int melspec(double *src, int sz, int framesize, int windowsize, int fftlen,
     
     /* Build the filter bank */
     
-    double minmel = ftomel(fstart);
-    double maxmel = ftomel(fend);
-    double spacing = (double) (maxmel - minmel) / (bands - 1);
+    double *fban = (double *) calloc(fftlen * bands, sizeof(double));
     
-    // Transcribed from Apple
-    /* https://developer.apple.com/documentation/accelerate/computing_the_mel_spectrum_using_linear_algebra */
-    int *filters = (int *) malloc(sizeof(double) * bands);
-    // 'i' goes up to maxmel + spacing to include the last iteration
-    for (double i = minmel; i < maxmel + spacing; i += spacing)
-        filters[(int) ((i - minmel) / spacing)] = (int) fbins * meltof(i) / fend;
+    double spacing = (double) (ftomel(fend) - ftomel(fstart)) / (bands + 1);
+    double *bedges = (double *) malloc(sizeof(double) * (bands + 2));
+    for (int i = 0; i < bands + 2; i++)
+        bedges[i] = meltof(i * spacing);
     
-    // TODO: This should run on the GPU
-    /* Create triangular filters */
-    // Filter bank shold have bands rows and fbin columns
-    double *fban = (double *) malloc(sizeof(double) * fbins * bands);
-    /* Wish I could imbed pictures in my comments... TODO: 4coder MD comments?*/
-    for (int i = 0; i < bands; i++) {
-        // Special case for the first band - the start of the filter is
-        // at frequency bin 0
-        int start = 0;
-        if (i > 0)
-            start = filters[i - 1];
-        // Special case for the last band - the end of the filter is
-        // at the last frequency bin
-        int end = fbins;
-        if (i < bands - 1)
-            end = filters[i + 1];
-        
-        for (int j = 0; j < fbins; j++) {
-            // If point is behind the current filter
-            if (filters[i] > j && j > start)
-                fban[j + i * fbins] = (j - start) / (filters[i] - start);
-            // If the point is the current filter
-            else if (j == filters[i])
-                fban[j + i * fbins] = 1;
-            // If the point is after the current filter
-            else if (filters[i] < j && j < end)
-                fban[j + i * fbins] = (j - filters[i]) / (end - filters[i]);
-            else
-                // Anywhere else in the band
-                fban[j + i * fbins] = 0;
+    double *linf = (double *) malloc(sizeof(double) * fftlen);
+    for (int i = 0; i < fftlen; i++) linf[i] = (double) fs * i / fftlen;
+    puts("linf:");
+    for (int i = 0; i < fftlen; i++) printfu("%lf, ", linf[i]);
+    puts();
+    
+    int valide = 0;
+    for (int i = 0; i < bands + 2; i++) if (bedges[i] - fs / 2 < sqrt(EPSIL)) valide++;
+    printf("Valid edges: %d, total edges: %d\n", valide, bands + 2);
+    
+    double *p = (double *) calloc(valide, sizeof(double));
+    for (int i = 0; i < valide; i++) {
+        for (int j = 0; j < fftlen; j++) {
+            if(linf[j] > bedges[i]) {
+                p[i] = j;
+                break;
+            }
         }
     }
+    puts("P:");
+    for (int i = 0; i < valide; i++) printfu("%lf, ", p[i]);
+    puts();
+    //exit(0);
+    
+    double *bw = (double *) malloc(sizeof(double) * bands + 1);
+    for (int i = 0; i < bands + 1; i++) bw[i] = bedges[i + 1] - bedges[i];
+    
+    puts("Computing filters...");
+    for (int i = 0; i < valide - 2; i++) {
+        // Rising side
+        for (int j = p[i]; j < p[i + 1]; j++)
+            fban[i + j * bands] = (linf[j] - bedges[i]) / bw[i];
+        
+        // Falling side
+        for (int j = p[i + 1]; j < p[i + 2]; j++)
+            fban[i + j * bands] = (bedges[i + 2] - linf[j]) / bw[i + 1];
+    }
+    
+    free(bedges);
+    free(linf);
+    free(p);
+    free(bw);
     
     puts("Filter bank...");
-    for (int i = 0; i < bands; i++) {
-        for (int j = 0; j < fbins; j++) {
-            printfu("%lf, ", fban[i + j * bands]);
+    for (int i = 0; i < fbins; i++) {
+        for (int j = 0; j < bands; j++) {
+            printfu("%lf, ", fban[j + i * bands]);
         } putsu();
     } puts("... Done");
     
@@ -374,7 +380,6 @@ int melspec(double *src, int sz, int framesize, int windowsize, int fftlen,
     
     free(ft);
     free(stftr);
-    free(filters);
     free(fban);
     
     return MNO_ERR;
