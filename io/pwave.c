@@ -144,23 +144,38 @@ src - source wav file
 res - result (allocated automaticly, sized src->samples)
 returns 0 on success
 */
-int wavtod(WAVC *src, double **res) {
-    int bbs = (int) (src->hdr.bitspsample / 8);
+int wavtod(WAVC *src, double **res, int norm) {
+    int bps = (int) (src->hdr.bitspsample / 8);
     
     // Check if size is "operateable" on this arch
-    if (bbs != sizeof(short int) && bbs != sizeof(int) && bbs != sizeof(long int) && bbs != sizeof(long long int)) return WNOT_SUPPORTED;
+    if (bps != sizeof(short int) && bps != sizeof(int) && bps != sizeof(long int) && bps != sizeof(long long int)) return WNOT_SUPPORTED;
     
     double *r = (double *) malloc(sizeof(double) * src->samples);
     
+    // long long int will always fit, since its unsigned and im checking for
+    // signed.
+    int maxsig = (int) (1LL << bps * 8) / 2;
+    printf("max signed int of size %d is %d?\n", bps * 8, maxsig);
+    
     for (int i = 0; i < src->samples; i++) {
-        if (bbs == sizeof(short int))
+        if (bps == sizeof(short int))
             r[i] = (double) ((short int *) src->data)[i];
-        else if (bbs == sizeof(int))
+        else if (bps == sizeof(int))
             r[i] = (double) ((int *) src->data)[i];
-        else if (bbs == sizeof(long int))
+        else if (bps == sizeof(long int))
             r[i] = (double) ((long int *) src->data)[i];
-        else if (bbs == sizeof(long long int))
+        else if (bps == sizeof(long long int))
             r[i] = (double) ((long long int *) src->data)[i];
+        
+        // Matlab normalizes inputs unless specified otherwise,
+        // and so should we.
+        if (norm) {
+            int offset = (r[i] > 0) ? 1 : 0;
+            
+            // Due to how signed integers have less positive numbers
+            // than negative ones, theres a need to account for the offset.
+            r[i] = r[i] / (maxsig - offset);
+        }
     }
     
     *res = r;

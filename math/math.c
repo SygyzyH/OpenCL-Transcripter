@@ -7,6 +7,7 @@
 #include "math.h"
 #include "../io/args.h"
 #include "../io/oclapi.h"
+#include "../std.h"
 
 #define noerr(e) { if ((e)) { puts("MATH_H: Initialized math UNSUCCESSFULY."); fflush(stdout); return e; } }
 
@@ -64,8 +65,6 @@ int matmul(double *a, unsigned int aw, unsigned int ah,
     } else {
         return MINVALID_ARG;
     }
-    
-    puts("456");
     
     size_t gz[] = { az, bz };
     
@@ -159,8 +158,8 @@ res - result (automaticly allocated)
 op - either 
 returns 0 on success
 */
-int stft(double *src, int sz, int framesize, int windowsize, int hopsize,
-         double **res, int op) {
+int stft(double *src, int sz, int framesize, int windowsize, int fftlen,
+         int hopsize, int sides, Mat **res) {
     if (!minit) return MUNINITIALIZED;
     
     int err;
@@ -171,18 +170,42 @@ int stft(double *src, int sz, int framesize, int windowsize, int hopsize,
     
     if (hopsize == 0) return MZERO_DIV;
     if (framesize == 0) return MZERO_DIV;
+    if (fftlen < framesize) return MINVALID_ARG;
     
-    int fbins, frames;
-	stftwh(sz, framesize, hopsize, &fbins, &frames);
+    int fbins;
+    switch (sides) {
+        case ONE_SIDED:
+        fbins = ceil(fftlen / 2 + 1);
+        break;
+        
+        case TWO_SIDED:
+        case TWO_SIDED_CENTERED:
+        fbins = fftlen;
+        break;
+        
+        default:
+        return MINVALID_ARG;
+    }
+    int frames = ceil(((sz - framesize) / hopsize) + 1);
+    /*int fbins, frames;
+	stftwh(sz, framesize, hopsize, &fbins, &frames);*/
     
     double *r = (double *) malloc(sizeof(double) * fbins * frames);
     
     size_t gz[] = { frames, fbins };
     
-    run_kernel("stft", 2, gz, NULL, src, sz, OCLREAD | OCLCPY,
-               framesize, windowsize, hopsize, r, fbins * frames, OCLWRITE | OCLOUT);
+    printf("framesize: %d, windowsize: %d, fftlen: %d, hopsize: %d, fbins: %d, frames: %d\n",
+           framesize, windowsize, fftlen, hopsize, fbins, frames);
+    puts("stft input:"); for (int i = 0; i < sz; i++) printfu("%lf, ", src[i]); putsu();
     
-    *res = r;
+    run_kernel("stft", 2, gz, NULL, src, sz, OCLREAD | OCLCPY,
+               framesize, windowsize, hopsize, fbins, sides,
+               r, fbins * frames, OCLWRITE | OCLOUT);
+    
+    *res = (Mat *) malloc(sizeof(Mat));
+    (*res)->width = fbins; 
+    (*res)->height = frames;
+    (*res)->data = r;
     
     return MNO_ERR;
 }
@@ -265,22 +288,22 @@ fend - ending frequency of filters
 res - resulting spectogram (memory automaticly allocated)
 returns 0 on success
 */
-int melspec(double *src, int sz, int framesize, int windowsize, int hopsize, int bands,
-            double fstart, double fend, double **res) {
+int melspec(double *src, int sz, int framesize, int windowsize, int fftlen, 
+            int hopsize, int bands, double fstart, double fend, Mat **res) {
     int e = 0;
     
     if (framesize < 1 || windowsize < 1 || hopsize < 1 || bands < 1) return MINVALID_ARG;
     
-    int fbins, frames;
-	stftwh(sz, framesize, hopsize, &fbins, &frames);
-    
-    if (fend == 0.0) fend = fbins;
-    
     /* Extract STFT */
     
-    double *ft;
-    if ((e = stft(src, sz, framesize, windowsize, hopsize, &ft, MAGSQ))) 
+    Mat *stftr;
+    if ((e = stft(src, sz, framesize, windowsize, fftlen, hopsize, TWO_SIDED, &stftr))) 
         return e;
+    
+    double *ft = stftr->data;
+    int fbins = stftr->width, frames = stftr->height;
+    
+    if (fend == 0.0) fend = fbins;
     
     /* Convert amplitude to Decibels */
     
@@ -332,15 +355,25 @@ int melspec(double *src, int sz, int framesize, int windowsize, int hopsize, int
         }
     }
     
+    puts("Filter bank...");
+    for (int i = 0; i < bands; i++) {
+        for (int j = 0; j < fbins; j++) {
+            printfu("%lf, ", fban[i + j * bands]);
+        } putsu();
+    } puts("... Done");
+    
     /* Apply filter bank to signal */
     
-    // TODO: There is a mistake here. fban should be rotated (?)
-    matmul(fban, bands, fbins, ft, fbins, frames, res);
-    puts("123");
+    *res = (Mat *) malloc(sizeof(Mat));
+    (*res)->width = bands;
+    (*res)->height = frames;
+    matmul(fban, bands, fbins, ft, fbins, frames, &((*res)->data));
+    printf("melspec: rw: %d, rh: %d\n", bands, frames);
     
     /* Cleanup */
     
     free(ft);
+    free(stftr);
     free(filters);
     free(fban);
     

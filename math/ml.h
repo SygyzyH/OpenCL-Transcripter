@@ -5,17 +5,8 @@
 
 #include "../std.h"
 
-#define unpkmat(mat) (mat).data, (mat).width, (mat).height
-#define unpkmatp(mat) (mat)->data, (mat)->width, (mat)->height
-
 enum ML_ERR { MLNO_ERR=0, MLINVALID_ARG, MLLAYER_ERR, MLSIZE_MISMATCH };
 enum PAD_TYPE { SAME=0, NONE=1 };
-
-typedef struct {
-    double *data;
-    unsigned int width;
-    unsigned int height;
-} Mat;
 
 typedef struct Layer {
     int inw; 

@@ -14,7 +14,7 @@
 
 #define EPSIL 1e-10
 
-enum STFT_OPTYPE { REAL, COMPLEX, MAGSQ };
+enum STFT_SIDES { ONE_SIDED=1, TWO_SIDED=2, TWO_SIDED_CENTERED=3 };
 enum DB_OPTYPE { SCALE_MAX, SCALE_ONE, SCALE_FIRST };
 enum MATH_ERR { MNO_ERR=0, MINVALID_ARG, MZERO_DIV, MSMALL_BUF, MUNINITIALIZED };
 
@@ -22,9 +22,20 @@ enum MATH_ERR { MNO_ERR=0, MINVALID_ARG, MZERO_DIV, MSMALL_BUF, MUNINITIALIZED }
 #define stfth(sz, framesize, hopsize) ceil(((sz - framesize) / hopsize) + 1)
 #define stftwh(sz, framesize, hopsize, w, h) { *w = stftw(framesize); *h = stfth(sz, framesize, hopsize); } 
 
+#define unpkmat(mat) (mat).data, (mat).width, (mat).height
+#define unpkmatp(mat) (mat)->data, (mat)->width, (mat)->height
+
+typedef struct {
+    double *data;
+    unsigned int width;
+    unsigned int height;
+} Mat;
+
 int amptodb(double **src, int sz, double topdb, int op);
-int stft(double *src, int sz, int framesize, int windowsize, int hopsize, double **res, int op);
-int melspec(double *src, int sz, int framesize, int windowsize, int hopsize, int bands, double fstart, double fend, double **res);
+int stft(double *src, int sz, int framesize, int windowsize,
+         int fftlen, int hopsize, int sides, Mat **res);
+int melspec(double *src, int sz, int framesize, int windowsize, int fftlen,
+            int hopsize, int bands, double fstart, double fend, Mat **res);
 
 int matmul(double *a, unsigned int aw, unsigned int ah, 
            double *b, unsigned int bw, unsigned int bh, double **res);

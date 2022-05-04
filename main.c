@@ -54,7 +54,7 @@ softmax
     
     Mat mAvgImg;
     mAvgImg.height = 1;
-    safe(ldbind("./machine/avgimg.bin", &mAvgImg.data, &mAvgImg.width));
+    criticly_safe(ldbind("./machine/avgimg.bin", &mAvgImg.data, &mAvgImg.width), "Failed to initialize machine.");
     
     machine->params = mAvgImg;
     
@@ -91,17 +91,39 @@ softmax
     WAVC *wav;
     pwav("./testing/dataset/Hebrew Build Converted/lo/temp1p3.wav", &wav, 2);
     double *stftinp;
-    wavtod(wav, &stftinp);
+    wavtod(wav, &stftinp, 1);
     printf("%d Samples\n", wav->samples);
-    for (int i = 0; i < wav->samples / 100; i++) printfu("%lf, ", stftinp[i]); putsu();
+    for (int i = 0; i < wav->samples / 100; i++) printfu("%.4e, ", stftinp[i]); putsu();
     
-    double *minp;
+    Mat *minp;
     int framesize = (int) wav->hdr.samplerate * 0.025;
     int hopsize = (int) wav->hdr.samplerate * 0.01;
-    // TODO: window normalization, fftlen
-    printf("e: %d\n", melspec(stftinp, wav->samples, framesize, framesize, hopsize, 40, 50, 7000, &minp));
+    printf("samplerate: %d, framesize: %d, hopsize: %d\n", wav->hdr.samplerate, framesize, hopsize);
     
-    for (int i = 0; i < 40; i++) printfu("%lf, ", minp[i]); puts();
+    // TODO: window normalization, fftlen
+    stft(stftinp, wav->samples, framesize, framesize, 512, hopsize, TWO_SIDED, &minp);
+    //melspec(stftinp, wav->samples, framesize, framesize, hopsize, 40, 50, 7000, &minp);
+    //printf("stft height should be at %lf once fft length is implemented\n", 
+    //stfth(wav->samples, 512, hopsize));
+    //double stfttest[128]; for (int i = 0; i < 128; i++) stfttest[i] = 1;
+    //double stfttest[6] = { 1.0, 1.0, 1.0, 1.0, 1.0, 1.0 };
+    //stft(stfttest, 6, 3, 3, 3, 3, TWO_SIDED, &minp);
+    //printf("e: %d\n", melspec(stftinp, wav->samples, framesize, framesize, hopsize, 40, 50, 7000, &minp));
+    
+    printf("w: %d, h: %d\n", minp->width, minp->height);
+    for (int i = 0; i < minp->height; i++) {
+        for (int j = 0; j < minp->width; j++) {
+            printfu("%.4e ", minp->data[j + i * minp->width]);
+        } putsu();
+    } putsu();
+    
+    // TODO: Each input's length may be smaller than one second, but the machine
+    // can only accept a fixed size. for this reason, there needs to be padding on
+    // width to ensure each segment is of the same length. To get the desired consistant
+    // dimensions, Matlab sets width to be consistently
+    // ceil((segmentDuration - frameDuration)/hopDuration)
+    // which ends up being ceil((1 - 0.025) / 0.01) = 98.
+    // I need to pad both sides as well (where the left side gets the reminder) to fit 98.
     
     /* Main loop */
     

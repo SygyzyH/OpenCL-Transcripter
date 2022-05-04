@@ -36,6 +36,6 @@ typedef struct {
 
 WAVC* frmtowav(WAVEFORMATEX format, unsigned char *data, unsigned int dsize);
 int pwav(char *fname, WAVC **res, int nchn);
-int wavtod(WAVC *src, double **res);
+int wavtod(WAVC *src, double **res, int norm);
 
 #endif //FPARSE_H
