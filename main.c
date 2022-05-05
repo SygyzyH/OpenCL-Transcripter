@@ -86,6 +86,13 @@ softmax
     mklayer(&machine, -1, -1, fullyc, NULL, "./machine/fullyc.bin");
     mklayer(&machine, -1, -1, softmax, NULL, NULL);
     
+    /* Designed parameters */
+    
+    double frameduration = 0.025;
+    double hopduration = 0.01;
+    double dfileduaration = 1;
+    int numhops = ceil((dfileduaration - frameduration) / hopduration);
+    
     /* Testing */
     
     WAVC *wav;
@@ -96,13 +103,13 @@ softmax
     for (int i = 0; i < wav->samples / 100; i++) printfu("%.4e, ", stftinp[i]); putsu();
     
     Mat *minp;
-    int framesize = (int) wav->hdr.samplerate * 0.025;
-    int hopsize = (int) wav->hdr.samplerate * 0.01;
+    int framesize = (int) wav->hdr.samplerate * frameduration;
+    int hopsize = (int) wav->hdr.samplerate * hopduration;
     printf("samplerate: %d, framesize: %d, hopsize: %d\n", wav->hdr.samplerate, framesize, hopsize);
     
     // TODO: window normalization, fftlen
     //stft(stftinp, wav->samples, framesize, framesize, 512, hopsize, TWO_SIDED, &minp);
-    melspec(stftinp, wav->samples, wav->hdr.samplerate, framesize, framesize, 512, hopsize, 32, 0, 8000, &minp);
+    melspec(stftinp, wav->samples, wav->hdr.samplerate, framesize, framesize, 512, hopsize, 40, 50, 7000, &minp);
     //printf("stft height should be at %lf once fft length is implemented\n", 
     //stfth(wav->samples, 512, hopsize));
     //double stfttest[128]; for (int i = 0; i < 128; i++) stfttest[i] = 1;
@@ -117,13 +124,13 @@ softmax
         } putsu();
     } putsu();
     
-    // TODO: Each input's length may be smaller than one second, but the machine
-    // can only accept a fixed size. for this reason, there needs to be padding on
-    // width to ensure each segment is of the same length. To get the desired consistant
-    // dimensions, Matlab sets width to be consistently
-    // ceil((segmentDuration - frameDuration)/hopDuration)
-    // which ends up being ceil((1 - 0.025) / 0.01) = 98.
     // I need to pad both sides as well (where the left side gets the reminder) to fit 98.
+    
+    // Each input's length may be smaller than one second, but the machine
+    // can only accept a fixed size. for this reason, there needs to be padding on
+    // width to ensure each segment is of the same length.
+    Mat *res;
+    ensuredims(*minp, numhops, minp->height, &res);
     
     /* Main loop */
     

@@ -44,7 +44,7 @@ ah - matrix height
 b - second matrix data or single value
 bw - matrix width
 bh - matrix height
-res - pointer to reslut (allocates needed memory automaticly)
+res - pointer to result (allocates needed memory automaticly, aw * bh)
 returns 0 on success
 */
 
@@ -52,27 +52,21 @@ int matmul(double *a, unsigned int aw, unsigned int ah,
            double *b, unsigned int bw, unsigned int bh, double **res) {
     if (!minit) return MUNINITIALIZED;
     
-    unsigned int k, az, bz;
-    
-    if (aw == bh) {
-        k = aw;
-        az = ah;
-        bz = bw;
-    } else if (ah == bw) {
-        k = ah;
-        az = aw;
-        bz = bh;
-    } else {
+    if (ah != bw)
         return MINVALID_ARG;
-    }
     
-    size_t gz[] = { az, bz };
+    size_t gz[] = { aw, bh };
     
-    double *r = (double *) malloc(sizeof(double) * az * bz);
-    run_kernel("matmul", 2, gz, NULL, a, aw * ah, OCLREAD | OCLCPY,
-               b, bw * bh, OCLREAD | OCLCPY, bz, az, k, r, az * bz, OCLWRITE | OCLOUT);
+    double *r = (double *) malloc(sizeof(double) * aw * bh);
+    run_kernel("matmul", 2, gz, NULL, 
+               a, aw * ah, OCLREAD | OCLCPY,
+               b, bw * bh, OCLREAD | OCLCPY, 
+               aw, ah, bw,
+               r, aw * bh, OCLWRITE | OCLOUT);
+    
     
     *res = r;
+    printf("Matmult result: %d * %d\n", aw, bh);
     
     return MNO_ERR;
 }
@@ -199,12 +193,12 @@ int stft(double *src, int sz, int framesize, int windowsize, int fftlen,
     puts("stft input:"); for (int i = 0; i < sz; i++) printfu("%lf, ", src[i]); putsu();
     
     run_kernel("stft", 2, gz, NULL, src, sz, OCLREAD | OCLCPY,
-               framesize, windowsize, hopsize, fbins, sides,
+               framesize, windowsize, hopsize, fbins, frames, sides,
                r, fbins * frames, OCLWRITE | OCLOUT);
     
     *res = (Mat *) malloc(sizeof(Mat));
-    (*res)->width = fbins; 
-    (*res)->height = frames;
+    (*res)->width = frames; 
+    (*res)->height = fbins;
     (*res)->data = r;
     
     return MNO_ERR;
@@ -301,24 +295,20 @@ int melspec(double *src, int sz, int fs, int framesize, int windowsize, int fftl
         return e;
     
     double *ft = stftr->data;
-    int fbins = stftr->width, frames = stftr->height;
+    int fbins = stftr->height, frames = stftr->width;
     
     if (fend == 0.0) fend = fbins;
     
-    /* Convert amplitude to Decibels */
-    
-    amptodb(&ft, fbins * frames, -1, SCALE_ONE);
-    
     /* Build the filter bank */
     
-    double *fban = (double *) calloc(fftlen * bands, sizeof(double));
+    double *fban = (double *) calloc(fbins * bands, sizeof(double));
     
     double spacing = (double) (ftomel(fend) - ftomel(fstart)) / (bands + 1);
     double *bedges = (double *) malloc(sizeof(double) * (bands + 2));
     for (int i = 0; i < bands + 2; i++)
-        bedges[i] = meltof(i * spacing);
+        bedges[i] = meltof(ftomel(fstart) + i * spacing);
     
-    double *linf = (double *) malloc(sizeof(double) * fftlen);
+    double *linf = (double *) malloc(sizeof(double) * fbins);
     for (int i = 0; i < fftlen; i++) linf[i] = (double) fs * i / fftlen;
     puts("linf:");
     for (int i = 0; i < fftlen; i++) printfu("%lf, ", linf[i]);
@@ -340,7 +330,6 @@ int melspec(double *src, int sz, int fs, int framesize, int windowsize, int fftl
     puts("P:");
     for (int i = 0; i < valide; i++) printfu("%lf, ", p[i]);
     puts();
-    //exit(0);
     
     double *bw = (double *) malloc(sizeof(double) * bands + 1);
     for (int i = 0; i < bands + 1; i++) bw[i] = bedges[i + 1] - bedges[i];
@@ -349,38 +338,109 @@ int melspec(double *src, int sz, int fs, int framesize, int windowsize, int fftl
     for (int i = 0; i < valide - 2; i++) {
         // Rising side
         for (int j = p[i]; j < p[i + 1]; j++)
-            fban[i + j * bands] = (linf[j] - bedges[i]) / bw[i];
+            fban[j + i * fbins] = (linf[j] - bedges[i]) / bw[i];
         
         // Falling side
         for (int j = p[i + 1]; j < p[i + 2]; j++)
-            fban[i + j * bands] = (bedges[i + 2] - linf[j]) / bw[i + 1];
+            fban[j + i * fbins] = (bedges[i + 2] - linf[j]) / bw[i + 1];
     }
     
+    /* Filter bank normalization */
+    // Bandwidth normalization
+    
+    double *weightb = (double *) malloc(sizeof(double) * bands);
+    for (int i = 0; i < bands; i++) weightb[i] = 2 / (bedges[i + 2] - bedges[i]);
+    puts("Weight per band:");
+    for (int i = 0; i < bands; i++) printfu("%lf, ", weightb[i]);
+    puts();
+    
+    
+    for (int i = 0; i < bands; i++) {
+        for (int j = 0; j < fftlen; j++) {
+            fban[j + i * fbins] *= weightb[i];
+        }
+    }
+    
+    free(weightb);
     free(bedges);
     free(linf);
     free(p);
     free(bw);
     
     puts("Filter bank...");
+    for (int i = 0; i < bands; i++) {
+        for (int j = 0; j < fbins; j++) {
+            printfu("%lf, ", fban[j + i * fbins]);
+        } putsu();
+    } puts("... Done");
+    puts("Stft...");
     for (int i = 0; i < fbins; i++) {
-        for (int j = 0; j < bands; j++) {
-            printfu("%lf, ", fban[j + i * bands]);
+        for (int j = 0; j < frames; j++) {
+            printfu("%lf, ", ft[j + i * frames]);
         } putsu();
     } puts("... Done");
     
     /* Apply filter bank to signal */
     
     *res = (Mat *) malloc(sizeof(Mat));
-    (*res)->width = bands;
-    (*res)->height = frames;
-    matmul(fban, bands, fbins, ft, fbins, frames, &((*res)->data));
-    printf("melspec: rw: %d, rh: %d\n", bands, frames);
+    (*res)->width = frames;
+    (*res)->height = bands;
+    // TODO: So in matlab everything up to here works out perfectly...
+    // Could it be that the matrix multiplication is not working?
+    matmul(ft, frames, fbins, fban, fbins, bands, &((*res)->data));
+    printf("melspec: rw: %d, rh: %d\n", (*res)->width, (*res)->height);
+    
+    /* Convert amplitude to Decibels */
+    
+    // amptodb(&ft, fbins * frames, -1, SCALE_ONE);
+    // amptodb(&((*res)->data), (*res)->width * (*res)->heightm -1, SCALE_ONE);
     
     /* Cleanup */
     
     free(ft);
     free(stftr);
     free(fban);
+    
+    return MNO_ERR;
+}
+
+// Ensure matrix dimensions match
+/* 
+ inp - input matrix
+tw - target width
+th - target height
+res - pointer to result OR NULL (automaticly allocated)
+returns 0 if res isn't NULL, otherwise returns MINVALID_ARG if dimensions don't match, else 0
+*/
+int ensuredims(Mat inp, int tw, int th, Mat **res) {
+    int pleft = 0, pright = 0, ptop = 0, pbot = 0;
+    
+    if (inp.width < tw || inp.height < th) {
+        if (res == NULL) return MINVALID_ARG;
+        
+        pleft = ceil((tw - inp.width) / 2);
+        pright = tw - pleft;
+        ptop = ceil((th - inp.height) / 2);
+        pbot = th - ptop;
+    }
+    
+    if (res == NULL) return MNO_ERR;
+    
+    Mat *r = (Mat *) malloc(sizeof(Mat));
+    r->data = (double *) malloc(sizeof(double) * tw * th);
+    r->width = tw;
+    r->height = th;
+    
+    for (int i = 0; i < th; i++) {
+        for (int j = 0; j < tw; j++) {
+            if (j < pleft || j > pright || i < ptop || i > pbot)
+                r->data[j + i * tw] = 0;
+            else
+                r->data[j + i * tw] = inp.data[j - pleft + (i - ptop) * inp.width];
+        }
+    }
+    
+    *res = r;
     
     return MNO_ERR;
 }

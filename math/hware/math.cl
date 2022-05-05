@@ -5,7 +5,7 @@ inline double hamming(int x, int windowsize, double alpha) {
 }
 
 __kernel void stft(__global double *src, int framesize, int windowsize, int hopsize,
-int fbins, int sides, __global double *res) {
+int fbins, int frames, int sides, __global double *res) {
 	
 	int frame = get_global_id(0);
 	int freq = get_global_id(1);
@@ -13,22 +13,23 @@ int fbins, int sides, __global double *res) {
 	// ceil(fbins / 2 + 1)
 	// 	   sum
 	//  -ceil(fbins / 2)
-	if (freq > ceil((double) fbins / 2 + 1)) freq = freq - fbins;
+	int freqn = freq;
+	if (freq > ceil((double) fbins / 2 + 1)) freqn = freq - fbins;
 
 	double sumr = 0;
 	double sumi = 0;
 
 	for (int n = 0; n < framesize; n++) {
 		double r = src[n + frame * hopsize] * hamming(n, windowsize, 0.54);
-        double phi = -2 * M_PI * n * freq / fbins;
+        double phi = -2 * M_PI * n * freqn / fbins;
 		sumr += r * cos(phi);
 		sumi += r * sin(phi);
 	}
 
 	if (sides <= 2)
-		res[freq + frame * fbins] = sumr * sumr + sumi * sumi;
+		res[frame + freq * frames] = sumr * sumr + sumi * sumi;
 	else {
-		int offset = (int) freq + fbins - ceil((double) fbins / 2 + 1) + 1;
-		res[offset % fbins + frame * fbins] = sumr * sumr + sumi * sumi;
+		int offset = (int) freq + ceil((double) fbins / 2 + 1) + 1;
+		res[frame + (offset % fbins) * frames] = sumr * sumr + sumi * sumi;
 	}
 }

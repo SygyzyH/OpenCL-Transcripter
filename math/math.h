@@ -48,6 +48,8 @@ int matmuls(double *a, unsigned int aw, unsigned int ah,
 int matadds(double *a, unsigned int aw, unsigned int ah,
             double b, double **res);
 
+int ensuredims(Mat inp, int tw, int th, Mat **res);
+
 int mainit();
 
 #endif //MATH_H

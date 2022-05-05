@@ -1,13 +1,13 @@
-__kernel void matmul(__global double *a, __global double *b, unsigned int w, unsigned int h, unsigned int k, __global double *res) {
+__kernel void matmul(__global double *a, __global double *b, unsigned int aw, unsigned int ah, unsigned int bw, __global double *res) {
 	int gw = get_global_id(0);
 	int gh = get_global_id(1);
 
 	double acc = 0;
-	for (int i = 0; i < k; i++) {
-		acc += a[i + gh * h] * b[gw + i * w];
+	for (int i = 0; i < ah; i++) {
+		acc += a[gw + i * aw] * b[i + gh * bw];
 	}
 
-	res[gw + gh * w] = acc;
+	res[gw + gh * aw] = acc;
 }
 
 __kernel void matadd(__global double *a, __global double *b, unsigned int w, unsigned int h, __global double *res) {
