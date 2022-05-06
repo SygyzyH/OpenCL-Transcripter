@@ -5,6 +5,8 @@
 
 #include "../std.h"
 
+#define ML_PROG "./math/hware/ml.c" 
+
 enum ML_ERR { MLNO_ERR=0, MLINVALID_ARG, MLLAYER_ERR, MLSIZE_MISMATCH };
 enum PAD_TYPE { SAME=0, NONE=1 };
 
@@ -45,6 +47,8 @@ int maxpool(double *params, int paramsw, int unused0,
             double *in, int inw, int inh, Mat **out);
 int conv2d(double *params, int paramsw, int unused0,
            double *in, int inw, int inh, Mat **out);
+
+int mlinit();
 
 INLINE void mklayer(Layer **machine, int inw, int inh, void *transform, Layer *next, const char *path) {
     Layer *newl = (Layer *) malloc(sizeof(Layer));

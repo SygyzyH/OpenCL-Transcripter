@@ -3,6 +3,7 @@
 #include <time.h>
 
 #include "../io/args.h"
+#include "../io/oclapi.h"
 #include "math.h"
 #include "ml.h"
 
@@ -13,6 +14,27 @@ when making a machine.
  */
 // TODO: Layer functions need to run on the GPU, most of 
 // this can be easily done using the math library.
+
+bool mlinited = false;
+
+// Initilize kernels for machine learning operations
+/*
+returns 0 on success
+*/
+int mlinit() {
+    int err;
+    char *mprog = ldfile(ML_PROG);
+    err = register_from_src(&(const char *) { mprog }, 1, "relu", "bnorm");
+    free(mprog);
+    safe(!err);
+    
+    puts("ML_H: Initialized ml successfuly.");
+    
+    mlinited = true;
+    
+    return MNO_ERR;
+}
+
 /*
 Multidimensionality in memory is handled as:
 for a tensor with 2nd degree dimensions of
@@ -78,41 +100,38 @@ filtern times:
     double *bias = weights + weightn;
     int biasn = (int) param->filtern;
     
-    int pw, ph;
+    int einw = inw, einh = (int) inh / param->channels;
+    
+    int ptw, pth;
     int ptop, pbot, pleft, pright;
     switch ((int) param->pad) {
         case SAME: {
             // In same padding mode, the output size would be input size / stride.
-            // Using the formula (input size - filter size + 2 * padding) / stride + 1 = output
-            // Solving for 2 * padding gives padding = filter size - stride.
+            // Using the formula (input size - pool size + 2 * padding) / stride + 1 = output
+            // Solving for 2 * padding gives padding = pool size - stride.
             // Than the padding of each dimension is padding / 2. Padding doesn't have to
             // be devisable by 2, so to solve that one side is given the reminder.
             // Matlab pads with the ceil on bottom and right side
-            pw = (int) abs(param->filterw - param->stridew);
-            ph = (int) abs(param->filterh - param->strideh);
+            int ow = ceil((double) einw / param->stridew);
+            int oh = ceil((double) einh / param->strideh);
+            int pw = (ow - 1) * param->stridew + param->filterw;
+            int ph = (oh - 1) * param->strideh + param->filterh;
             
-            // If there is a need for more padding than the filter size, there would
-            // be iterations over padding only. No point in those.
-            if (pw > param->filterw || ph > param->filterh) {
-                pw = ph = 0;
-                
-                ptop = 0;
-                pbot = 0;
-                pright = 0;
-                pleft = 0;
-                
-                break;
-            }
+            ptw = MAX(0, pw - einw);
+            pth = MAX(0, ph - einh);
             
-            ptop = floor(ph / 2);
-            pbot = ph - ptop;
-            pleft = floor(pw / 2);
-            pright = pw - pleft;
+            ptop = floor((double) pth / 2);
+            pbot = ceil((double) pth / 2);
+            pleft = floor((double) ptw / 2);
+            pright = ceil((double) ptw / 2);
             
             break;
         }
         
         case NONE: {
+            ptw = 0;
+            pth = 0;
+            
             ptop = 0;
             pbot = 0;
             pright = 0;
@@ -126,11 +145,9 @@ filtern times:
         return MLINVALID_ARG;
     }
     
-    int einw = inw, einh = (int) inh / param->channels;
-    
     Mat *o = (Mat *) malloc(sizeof(Mat));
-    o->width = ceil((einw - param->filterw + pw) / param->stridew + 1);
-    o->height = ceil(param->filtern * ((einh - param->filterh + ph) / param->strideh + 1));
+    o->width = floor((einw - param->filterw + ptw) / param->stridew) + 1;
+    o->height = floor(param->filtern * ((einh - param->filterh + pth) / param->strideh + 1));
     o->data = (double *) malloc(sizeof(double) * o->width * o->height);
     
     for (int n = 0; n < param->filtern; n++) {
@@ -200,7 +217,9 @@ int maxpool(double *params, int paramsw, int unused0,
     
     PARAMS *param = (PARAMS *) params;
     
-    int pw, ph;
+    int einw = inw, einh = (int) inh / param->channels;
+    
+    int ptw, pth;
     int ptop, pbot, pleft, pright;
     switch ((int) param->pad) {
         case SAME: {
@@ -210,31 +229,26 @@ int maxpool(double *params, int paramsw, int unused0,
             // Than the padding of each dimension is padding / 2. Padding doesn't have to
             // be devisable by 2, so to solve that one side is given the reminder.
             // Matlab pads with the ceil on bottom and right side
-            pw = (int) abs(param->poolw - param->stridew);
-            ph = (int) abs(param->poolh - param->strideh);
+            int ow = ceil((double) einw / param->stridew);
+            int oh = ceil((double) einh / param->strideh);
+            int pw = (ow - 1) * param->stridew + param->poolw;
+            int ph = (oh - 1) * param->strideh + param->poolh;
             
-            // If there is a need for more padding than the pool size, there would
-            // be iterations over padding only. No point in those.
-            if (pw > param->poolw || ph > param->poolh) {
-                pw = ph = 0;
-                
-                ptop = 0;
-                pbot = 0;
-                pright = 0;
-                pleft = 0;
-                
-                break;
-            }
+            ptw = MAX(0, pw - einw);
+            pth = MAX(0, ph - einh);
             
-            ptop = floor(ph / 2);
-            pbot = ph - ptop;
-            pleft = floor(pw / 2);
-            pright = pw - pleft;
+            ptop = floor((double) pth / 2);
+            pbot = ceil((double) pth / 2);
+            pleft = floor((double) ptw / 2);
+            pright = ceil((double) ptw / 2);
             
             break;
         }
         
         case NONE: {
+            ptw = 0;
+            pth = 0;
+            
             ptop = 0;
             pbot = 0;
             pright = 0;
@@ -248,11 +262,9 @@ int maxpool(double *params, int paramsw, int unused0,
         return MLINVALID_ARG;
     }
     
-    int einw = inw, einh = (int) inh / param->channels;
-    
     Mat *o = (Mat *) malloc(sizeof(Mat));
-    o->width = ceil((einw - param->poolw + pw) / param->stridew + 1);
-    o->height = ceil(param->channels * ((einh - param->poolh + ph) / param->strideh + 1));
+    o->width = floor((einw - param->poolw + ptw) / param->stridew) + 1;
+    o->height = floor(param->channels * ((einh - param->poolh + pth) / param->strideh + 1));
     o->data = (double *) malloc(sizeof(double) * o->width * o->height);
     
     // Its clearer to represent the three dimensional input as a triple
@@ -298,7 +310,6 @@ int maxpool(double *params, int paramsw, int unused0,
 
 int fullyc(double *params, int paramsw, int unused0,
            double *in, int inw, int inh, Mat **out) {
-    // TODO: Could be done using matmul and matadds.
     /*
 Parameters order:
 - in size
@@ -323,30 +334,22 @@ outsz times:
     int insz = (int) param->insz, outsz = (int) param->outsz;
     if (paramsw != (insz + 1) * outsz + sizeof(PARAMS) / sizeof(double)) return MLSIZE_MISMATCH;
     
-    if (inw * inh != insz * outsz) { 
-        printf("Size mismatch: expected %d, but got %d\n",
-               inw * inh, insz * outsz);
-        return MLINVALID_ARG;
-    }
+    if (inw * inh != insz) return MLINVALID_ARG;
     
-    double *weights = (double *) params + sizeof(PARAMS);
+    double *weights = (double *) params + sizeof(PARAMS) / sizeof(double);
     int weightn = insz * outsz;
     double *bias = (double *) weights + weightn;
     int biasn = outsz;
     
     Mat *o = (Mat *) malloc(sizeof(Mat));
     o->width = outsz;
-    o->height = 1;
-    o->data = (double *) malloc(sizeof(double) * o->width * o->height);
+    o->height = inw;
     
-    for (int i = 0; i < outsz; i++) {
-        double sum = bias[i];
-        
-        for (int j = 0; j < insz; j++)
-            sum += in[j + i * insz] * weights[j + i * insz];
-        
-        o->data[i] = sum;
-    }
+    double *m = NULL;
+    matmul(in, inw, inh, weights, insz, outsz, &(m));
+    matadd(m, o->width, o->height, bias, outsz, 1, &(o->data));
+    
+    free(m);
     
     *out = o;
     
@@ -355,7 +358,6 @@ outsz times:
 
 int zcenter(double *params, int paramsw, int unused0,
             double *in, int inw, int inh, Mat **out) {
-    // TODO: Could be done using matsub.
     /*
 Parameters order:
 insz times
@@ -368,9 +370,8 @@ insz times
     Mat *o = (Mat *) malloc(sizeof(Mat));
     o->width = inw;
     o->height = inh;
-    o->data = (double *) malloc(sizeof(double) * o->width * o->height);
     
-    for (int i = 0; i < insz; i++) o->data[i] = in[i] - params[i];
+    matsub(in, inw, inh, params, inw, inh, &(o->data));
     
     *out = o;
     
@@ -413,8 +414,8 @@ Parameters order:
     o->data = (double *) malloc(sizeof(double) * o->width * o->height);
     
     // https://www.mathworks.com/help/deeplearning/ref/nnet.cnn.layer.batchnormalizationlayer.html
+    int einsz = insz / channels;
     for (int c = 0; c < channels; c++) {
-        int einsz = insz / channels;
         for (int i = 0; i < einsz; i++) {
             o->data[i + c * einsz] = param[c].scale * (in[i + c * einsz] - param[c].mean) / sqrt(param[c].variance + EPSIL) + param[c].offset;
         }
@@ -457,7 +458,6 @@ int softmax(double *unused0, int unused1, int unused2,
             double *in, int iw, int ih, Mat **out) {
     int insz = iw * ih;
     
-    // Returns classesX1 size vector
     Mat *o = (Mat *) malloc(sizeof(Mat));
     o->width = insz;
     o->height = 1;

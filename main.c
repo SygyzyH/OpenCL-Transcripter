@@ -66,7 +66,7 @@ softmax
     mklayer(&machine, -1, -1, conv2d, NULL, "./machine/conv2.bin");
     mklayer(&machine, -1, -1, bnorm, NULL, "./machine/bnorm2.bin");
     mklayer(&machine, -1, -1, relu, NULL, NULL);
-    /*mklayer(&machine, -1, -1, maxpool, NULL, "./machine/maxpool2.bin");
+    mklayer(&machine, -1, -1, maxpool, NULL, "./machine/maxpool2.bin");
     
     mklayer(&machine, -1, -1, conv2d, NULL, "./machine/conv3.bin");
     mklayer(&machine, -1, -1, bnorm, NULL, "./machine/bnorm3.bin");
@@ -82,6 +82,7 @@ softmax
     mklayer(&machine, -1, -1, relu, NULL, NULL);
     mklayer(&machine, -1, -1, maxpool, NULL, "./machine/maxpool4.bin");
     
+    // Only used during training
     //mklayer(&machine, -1, -1, dropout, NULL, "./machine/dropout.bin");
     mklayer(&machine, -1, -1, fullyc, NULL, "./machine/fullyc.bin");
     mklayer(&machine, -1, -1, softmax, NULL, NULL);
@@ -114,13 +115,6 @@ softmax
     // width to ensure each segment is of the same length.
     Mat *res;
     ensuredims(*minp, numhops, minp->height, &res);
-    
-    puts("Padded result...");
-    for (int i = 0; i < res->height; i++) {
-        for (int j = 0; j < res->width; j++) {
-            printfu("%lf, ", res->data[j + i * res->width]);
-        } putsu();
-    } putsu();
     
     Mat *sclass;
     e = forwardpass(*machine, *res, &sclass);
@@ -155,6 +149,7 @@ int init() {
     safe(auinit());
     safe(ocinit());
     safe(mainit());
+    safe(mlinit());
     
     return 0;
 }
