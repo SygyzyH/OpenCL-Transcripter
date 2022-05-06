@@ -77,9 +77,6 @@ filtern times:
     int weightn = (int) param->filterw * param->filterh * param->channels * param->filtern;
     double *bias = weights + weightn;
     int biasn = (int) param->filtern;
-    for (int i = 0; i < biasn; i++) {
-        printf("%lf, ", bias[i]);
-    } puts("");
     
     int pw, ph;
     int ptop, pbot, pleft, pright;
@@ -132,8 +129,8 @@ filtern times:
     int einw = inw, einh = (int) inh / param->channels;
     
     Mat *o = (Mat *) malloc(sizeof(Mat));
-    o->width = floor((einw - param->filterw + pw) / param->stridew + 1);
-    o->height = floor(param->filtern * ((einh - param->filterh + ph) / param->strideh + 1));
+    o->width = ceil((einw - param->filterw + pw) / param->stridew + 1);
+    o->height = ceil(param->filtern * ((einh - param->filterh + ph) / param->strideh + 1));
     o->data = (double *) malloc(sizeof(double) * o->width * o->height);
     
     for (int n = 0; n < param->filtern; n++) {
@@ -254,8 +251,8 @@ int maxpool(double *params, int paramsw, int unused0,
     int einw = inw, einh = (int) inh / param->channels;
     
     Mat *o = (Mat *) malloc(sizeof(Mat));
-    o->width = floor((einw - param->poolw + pw) / param->stridew + 1);
-    o->height = floor(param->channels * ((einh - param->poolh + ph) / param->strideh + 1));
+    o->width = ceil((einw - param->poolw + pw) / param->stridew + 1);
+    o->height = ceil(param->channels * ((einh - param->poolh + ph) / param->strideh + 1));
     o->data = (double *) malloc(sizeof(double) * o->width * o->height);
     
     // Its clearer to represent the three dimensional input as a triple
@@ -280,10 +277,10 @@ int maxpool(double *params, int paramsw, int unused0,
                 
                 // Iterate over the pool and find the max value. Padding is ignored by
                 // clamping the value to the effective range
-                printf("Testing (%d, %d)\n", startw, starth);
                 for (int k = starth; k < param->poolh + starth; k++) {
                     for (int l = startw; l < param->poolw + startw; l++) {
-                        max = MAX(max, in[CLAMP(0, l, einw - 1) + CLAMP(ecinhs, k, ecinhe - 1) * einw]);
+                        if (l >= 0 && l < einw && k >= ecinhs && k < ecinhe)
+                            max = MAX(max, in[l + k * einw]);
                     }
                 }
                 
@@ -323,25 +320,30 @@ outsz times:
     
     if (paramsw < sizeof(PARAMS) / sizeof(double)) return MLSIZE_MISMATCH;
     PARAMS *param = (PARAMS *) params;
-    if (paramsw != (param->insz + 1)* param->outsz + sizeof(PARAMS) / sizeof(double)) return MLSIZE_MISMATCH;
+    int insz = (int) param->insz, outsz = (int) param->outsz;
+    if (paramsw != (insz + 1) * outsz + sizeof(PARAMS) / sizeof(double)) return MLSIZE_MISMATCH;
     
-    if (inw * inh != param->insz) return MLINVALID_ARG;
+    if (inw * inh != insz * outsz) { 
+        printf("Size mismatch: expected %d, but got %d\n",
+               inw * inh, insz * outsz);
+        return MLINVALID_ARG;
+    }
     
     double *weights = (double *) params + sizeof(PARAMS);
-    int weightn = param->insz * param->outsz;
+    int weightn = insz * outsz;
     double *bias = (double *) weights + weightn;
-    int biasn = param->outsz;
+    int biasn = outsz;
     
     Mat *o = (Mat *) malloc(sizeof(Mat));
-    o->width = param->outsz;
+    o->width = outsz;
     o->height = 1;
     o->data = (double *) malloc(sizeof(double) * o->width * o->height);
     
-    for (int i = 0; i < param->outsz; i++) {
+    for (int i = 0; i < outsz; i++) {
         double sum = bias[i];
         
-        for (int j = 0; j < param->insz; j++)
-            sum += in[j] * weights[(int) (j + i * param->outsz)];
+        for (int j = 0; j < insz; j++)
+            sum += in[j + i * insz] * weights[j + i * insz];
         
         o->data[i] = sum;
     }
@@ -379,6 +381,8 @@ int bnorm(double *params, int paramsw, int unused0,
           double *in, int inw, int inh, Mat **out) {
     /*
 Parameters order:
+- channels
+
    insz times
 - mean
 - variance
@@ -395,10 +399,13 @@ Parameters order:
     } PARAMS;
 #pragma pack(pop)
     
-    int insz = inw * inh;
-    if (paramsw != insz * sizeof(PARAMS) / sizeof(double)) return MLSIZE_MISMATCH;
+    if (paramsw < 1) return MLSIZE_MISMATCH;
+    int channels = params[0];
     
-    PARAMS *param = (PARAMS*) params;
+    int insz = inw * inh;
+    if (paramsw - 1 != channels * sizeof(PARAMS) / sizeof(double)) return MLSIZE_MISMATCH;
+    
+    PARAMS *param = (PARAMS*) (params + 1);
     
     Mat *o = (Mat *) malloc(sizeof(Mat));
     o->width = inw;
@@ -406,8 +413,12 @@ Parameters order:
     o->data = (double *) malloc(sizeof(double) * o->width * o->height);
     
     // https://www.mathworks.com/help/deeplearning/ref/nnet.cnn.layer.batchnormalizationlayer.html
-    for (int i = 0; i < insz; i++)
-        o->data[i] = param[i].scale * (in[i] - param[i].mean) / sqrt(param[i].variance + EPSIL) + param[i].offset;
+    for (int c = 0; c < channels; c++) {
+        int einsz = insz / channels;
+        for (int i = 0; i < einsz; i++) {
+            o->data[i + c * einsz] = param[c].scale * (in[i + c * einsz] - param[c].mean) / sqrt(param[c].variance + EPSIL) + param[c].offset;
+        }
+    }
     
     *out = o;
     
@@ -501,6 +512,7 @@ int forwardpass(Layer machine, Mat input, Mat **output) {
         if(p->inw != -1 && p->inh != -1)
             // Ensure the size is correct
             if (p->inw != datai->width || p->inh != datai->height) return MLSIZE_MISMATCH;
+        
         // Run the data through the current layer
         if((*p->transform)(unpkmat(p->params), unpkmatp(datai), output)) return MLLAYER_ERR;
         

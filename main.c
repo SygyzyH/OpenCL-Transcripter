@@ -47,8 +47,8 @@ softmax
 */
     
     Layer *machine = (Layer *) malloc(sizeof(Layer));
-    machine->inw = 40;
-    machine->inh = 98;
+    machine->inw = 98;
+    machine->inh = 40;
     machine->transform = zcenter;
     machine->next = NULL;
     
@@ -66,7 +66,7 @@ softmax
     mklayer(&machine, -1, -1, conv2d, NULL, "./machine/conv2.bin");
     mklayer(&machine, -1, -1, bnorm, NULL, "./machine/bnorm2.bin");
     mklayer(&machine, -1, -1, relu, NULL, NULL);
-    mklayer(&machine, -1, -1, maxpool, NULL, "./machine/maxpool2.bin");
+    /*mklayer(&machine, -1, -1, maxpool, NULL, "./machine/maxpool2.bin");
     
     mklayer(&machine, -1, -1, conv2d, NULL, "./machine/conv3.bin");
     mklayer(&machine, -1, -1, bnorm, NULL, "./machine/bnorm3.bin");
@@ -82,7 +82,7 @@ softmax
     mklayer(&machine, -1, -1, relu, NULL, NULL);
     mklayer(&machine, -1, -1, maxpool, NULL, "./machine/maxpool4.bin");
     
-    mklayer(&machine, -1, -1, dropout, NULL, "./machine/dropout.bin");
+    //mklayer(&machine, -1, -1, dropout, NULL, "./machine/dropout.bin");
     mklayer(&machine, -1, -1, fullyc, NULL, "./machine/fullyc.bin");
     mklayer(&machine, -1, -1, softmax, NULL, NULL);
     
@@ -107,30 +107,34 @@ softmax
     int hopsize = (int) wav->hdr.samplerate * hopduration;
     printf("samplerate: %d, framesize: %d, hopsize: %d\n", wav->hdr.samplerate, framesize, hopsize);
     
-    // TODO: window normalization, fftlen
-    //stft(stftinp, wav->samples, framesize, framesize, 512, hopsize, TWO_SIDED, &minp);
     melspec(stftinp, wav->samples, wav->hdr.samplerate, framesize, framesize, 512, hopsize, 40, 50, 7000, &minp);
-    //printf("stft height should be at %lf once fft length is implemented\n", 
-    //stfth(wav->samples, 512, hopsize));
-    //double stfttest[128]; for (int i = 0; i < 128; i++) stfttest[i] = 1;
-    //double stfttest[6] = { 1.0, 1.0, 1.0, 1.0, 1.0, 1.0 };
-    //stft(stfttest, 6, 3, 3, 3, 3, TWO_SIDED, &minp);
-    //printf("e: %d\n", melspec(stftinp, wav->samples, framesize, framesize, hopsize, 40, 50, 7000, &minp));
-    
-    printf("w: %d, h: %d\n", minp->width, minp->height);
-    for (int i = 0; i < minp->height; i++) {
-        for (int j = 0; j < minp->width; j++) {
-            printfu("%.4e ", minp->data[j + i * minp->width]);
-        } putsu();
-    } putsu();
-    
-    // I need to pad both sides as well (where the left side gets the reminder) to fit 98.
     
     // Each input's length may be smaller than one second, but the machine
     // can only accept a fixed size. for this reason, there needs to be padding on
     // width to ensure each segment is of the same length.
     Mat *res;
     ensuredims(*minp, numhops, minp->height, &res);
+    
+    puts("Padded result...");
+    for (int i = 0; i < res->height; i++) {
+        for (int j = 0; j < res->width; j++) {
+            printfu("%lf, ", res->data[j + i * res->width]);
+        } putsu();
+    } putsu();
+    
+    Mat *sclass;
+    e = forwardpass(*machine, *res, &sclass);
+    printf("e: %d\n", e);
+    
+    if (!e) {
+        printf("Forward pass succesful.\nMachine result: %d x %d\n", 
+               sclass->width, sclass->height);
+        for (int i = 0; i < sclass->height; i++) {
+            for (int j = 0; j < sclass->width; j++) {
+                printfu("%lf, ", sclass->data[j + i * sclass->width]);
+            } putsu();
+        } putsu();
+    }
     
     /* Main loop */
     

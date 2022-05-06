@@ -14,7 +14,7 @@ typedef struct Layer {
     Mat params;
     /* 
 Params: layer parameter (usually weights), input, output ptr.
- Returns: output of function.
+ Returns: 0 on success.
 */
     int (*transform)(double *, int, int, double *, int, int, Mat **);
     // Maybe ill implement

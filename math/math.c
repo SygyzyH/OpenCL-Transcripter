@@ -64,9 +64,7 @@ int matmul(double *a, unsigned int aw, unsigned int ah,
                aw, ah, bw,
                r, aw * bh, OCLWRITE | OCLOUT);
     
-    
     *res = r;
-    printf("Matmult result: %d * %d\n", aw, bh);
     
     return MNO_ERR;
 }
@@ -188,10 +186,6 @@ int stft(double *src, int sz, int framesize, int windowsize, int fftlen,
     
     size_t gz[] = { frames, fbins };
     
-    printf("framesize: %d, windowsize: %d, fftlen: %d, hopsize: %d, fbins: %d, frames: %d\n",
-           framesize, windowsize, fftlen, hopsize, fbins, frames);
-    puts("stft input:"); for (int i = 0; i < sz; i++) printfu("%lf, ", src[i]); putsu();
-    
     run_kernel("stft", 2, gz, NULL, src, sz, OCLREAD | OCLCPY,
                framesize, windowsize, hopsize, fbins, frames, sides,
                r, fbins * frames, OCLWRITE | OCLOUT);
@@ -310,13 +304,9 @@ int melspec(double *src, int sz, int fs, int framesize, int windowsize, int fftl
     
     double *linf = (double *) malloc(sizeof(double) * fbins);
     for (int i = 0; i < fftlen; i++) linf[i] = (double) fs * i / fftlen;
-    puts("linf:");
-    for (int i = 0; i < fftlen; i++) printfu("%lf, ", linf[i]);
-    puts();
     
     int valide = 0;
     for (int i = 0; i < bands + 2; i++) if (bedges[i] - fs / 2 < sqrt(EPSIL)) valide++;
-    printf("Valid edges: %d, total edges: %d\n", valide, bands + 2);
     
     double *p = (double *) calloc(valide, sizeof(double));
     for (int i = 0; i < valide; i++) {
@@ -327,14 +317,10 @@ int melspec(double *src, int sz, int fs, int framesize, int windowsize, int fftl
             }
         }
     }
-    puts("P:");
-    for (int i = 0; i < valide; i++) printfu("%lf, ", p[i]);
-    puts();
     
     double *bw = (double *) malloc(sizeof(double) * bands + 1);
     for (int i = 0; i < bands + 1; i++) bw[i] = bedges[i + 1] - bedges[i];
     
-    puts("Computing filters...");
     for (int i = 0; i < valide - 2; i++) {
         // Rising side
         for (int j = p[i]; j < p[i + 1]; j++)
@@ -350,10 +336,6 @@ int melspec(double *src, int sz, int fs, int framesize, int windowsize, int fftl
     
     double *weightb = (double *) malloc(sizeof(double) * bands);
     for (int i = 0; i < bands; i++) weightb[i] = 2 / (bedges[i + 2] - bedges[i]);
-    puts("Weight per band:");
-    for (int i = 0; i < bands; i++) printfu("%lf, ", weightb[i]);
-    puts();
-    
     
     for (int i = 0; i < bands; i++) {
         for (int j = 0; j < fftlen; j++) {
@@ -367,19 +349,6 @@ int melspec(double *src, int sz, int fs, int framesize, int windowsize, int fftl
     free(p);
     free(bw);
     
-    puts("Filter bank...");
-    for (int i = 0; i < bands; i++) {
-        for (int j = 0; j < fbins; j++) {
-            printfu("%lf, ", fban[j + i * fbins]);
-        } putsu();
-    } puts("... Done");
-    puts("Stft...");
-    for (int i = 0; i < fbins; i++) {
-        for (int j = 0; j < frames; j++) {
-            printfu("%lf, ", ft[j + i * frames]);
-        } putsu();
-    } puts("... Done");
-    
     /* Apply filter bank to signal */
     
     *res = (Mat *) malloc(sizeof(Mat));
@@ -388,7 +357,6 @@ int melspec(double *src, int sz, int fs, int framesize, int windowsize, int fftl
     // TODO: So in matlab everything up to here works out perfectly...
     // Could it be that the matrix multiplication is not working?
     matmul(ft, frames, fbins, fban, fbins, bands, &((*res)->data));
-    printf("melspec: rw: %d, rh: %d\n", (*res)->width, (*res)->height);
     
     /* Convert amplitude to Decibels */
     

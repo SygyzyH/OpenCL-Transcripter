@@ -12,7 +12,7 @@
 #define MIN(X, Y) (((X) < (Y)) ? (X) : (Y))
 #define CLAMP(BOT, A, TOP) (MIN(MAX(BOT, A), TOP))
 
-#define EPSIL 1e-10
+#define EPSIL 1e-6
 
 enum STFT_SIDES { ONE_SIDED=1, TWO_SIDED=2, TWO_SIDED_CENTERED=3 };
 enum DB_OPTYPE { SCALE_MAX, SCALE_ONE, SCALE_FIRST };
