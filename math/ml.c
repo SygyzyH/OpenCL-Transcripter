@@ -14,6 +14,7 @@ when making a machine.
  */
 // TODO: Layer functions need to run on the GPU, most of 
 // this can be easily done using the math library.
+// TODO: To ensure MATLAB compatibilty, use activations(trainedNet, audioIn, INDEX)
 
 bool mlinited = false;
 
@@ -24,9 +25,10 @@ returns 0 on success
 int mlinit() {
     int err;
     char *mprog = ldfile(ML_PROG);
-    err = register_from_src(&(const char *) { mprog }, 1, "relu", "bnorm");
+    err = register_from_src(&(const char *) { mprog }, 5, 
+                            "relu", "bnorm", "softmax", "maxpool", "conv2d");
     free(mprog);
-    safe(!err);
+    safe(err);
     
     puts("ML_H: Initialized ml successfuly.");
     
@@ -78,6 +80,7 @@ filtern * filterw * filterh * channels times:
 filtern times:
 - bias
 */
+    
 #pragma pack(push, 1)
     typedef struct {
         double stridew;
@@ -150,45 +153,18 @@ filtern times:
     o->height = floor(param->filtern * ((einh - param->filterh + pth) / param->strideh + 1));
     o->data = (double *) malloc(sizeof(double) * o->width * o->height);
     
-    for (int n = 0; n < param->filtern; n++) {
-        // Iterating over the output is clearer than over the input
-        for (int i = 0; i < o->height / param->filtern; i++) {
-            for (int j = 0; j < o->width; j++) {
-                // Starting sum with bias would save an addition later
-                double sum = bias[n];
-                
-                // Convelution goes three dimensionaly
-                for (int c = 0; c < param->channels; c++) {
-                    // effective channel height start (and end) is the starting and ending 
-                    // heights when considering the layout of channels in memory.
-                    int ecinhs = c * einh;
-                    int ecinhe = (c + 1) * einh;
-                    
-                    // Calculate the starting position. Filter will be iterated starting from
-                    // these indexes.
-                    int startw = j * param->stridew - pleft;
-                    int starth = i * param->strideh - ptop + ecinhs;
-                    
-                    // Iterate over the filter. Padding cannot be ignored by clamping
-                    // since itll be multiplied by a potentially non-zero value.
-                    for (int k = starth; k < param->filterh + starth; k++) {
-                        for (int l = startw; l < param->filterw + startw; l++) {
-                            if (l >= 0 && l < einw && k >= ecinhs && k < ecinhe) {
-                                int weindex = (l - startw) + (k - starth) * param->filterw + 
-                                    c * param->filterw * param->filterh +
-                                    n * param->filterw * param->filterh * param->channels;
-                                sum += in[l + k * einw] * weights[weindex];
-                            }
-                        }
-                    }
-                }
-                
-                // Save the result
-                int eoc = (int) n * o->width * o->height / param->filtern;
-                o->data[j + i * o->width + eoc] = sum;
-            }
-        }
-    }
+    int ew = o->width, eh = (int) o->height / param->filtern;
+    size_t gz[] = { param->filtern * param->channels, ew * param->filterw, eh * param->filterh };
+    size_t lz[] = { param->channels, param->filterw, param->filterh };
+    
+    run_kernel("conv2d", 3, gz, lz,
+               in, inw * inh, OCLREAD | OCLCPY,
+               inw, inh, (int) param->stridew, (int) param->strideh,
+               pleft, pright, ptop, pbot,
+               NULL, (int) (param->filterw * param->filterh * param->channels), OCLREAD | OCLWRITE,
+               bias, biasn, OCLREAD | OCLCPY,
+               weights, weightn, OCLREAD | OCLCPY,
+               o->data, o->width * o->height, OCLWRITE | OCLOUT);
     
     *out = o;
     
@@ -267,42 +243,15 @@ int maxpool(double *params, int paramsw, int unused0,
     o->height = floor(param->channels * ((einh - param->poolh + pth) / param->strideh + 1));
     o->data = (double *) malloc(sizeof(double) * o->width * o->height);
     
-    // Its clearer to represent the three dimensional input as a triple
-    // nested array, even though iterating through i -> o->hieght and 
-    // figuring out c is possible.
-    for (int c = 0; c < param->channels; c++) {
-        // effective channel height start and end is the starting and ending 
-        // height  when considering the layout of channels in memory
-        int ecinhs = c * einh;
-        int ecinhe = (c + 1) * einh;
-        
-        // Iterating over the output is clearer than over the input
-        for (int i = 0; i < o->height / param->channels; i++) {
-            for (int j = 0; j < o->width; j++) {
-                // Calculate the starting position. Pool will be iterated starting from
-                // these indexes
-                int startw = j * param->stridew - pleft;
-                int starth = i * param->strideh - ptop + ecinhs;
-                
-                // Starting max is the first in the pool
-                double max = in[CLAMP(0, startw, einw - 1) + CLAMP(ecinhs, starth, ecinhe - 1) * einw];
-                
-                // Iterate over the pool and find the max value. Padding is ignored by
-                // clamping the value to the effective range
-                for (int k = starth; k < param->poolh + starth; k++) {
-                    for (int l = startw; l < param->poolw + startw; l++) {
-                        if (l >= 0 && l < einw && k >= ecinhs && k < ecinhe)
-                            max = MAX(max, in[l + k * einw]);
-                    }
-                }
-                
-                // Save the result
-                int eoc = (int) c * o->width * o->height / param->channels;
-                o->data[j + i * o->width + eoc] = max;
-            }
-        }
-    }
+    int ew = o->width, eh = (int) o->height / param->channels;
+    size_t gz[] = { ew * param->poolw, eh * param->poolh, param->channels };
+    size_t lz[] = { param->poolw, param->poolh, 1 };
     
+    run_kernel("maxpool", 3, gz, lz,
+               in, inw * inh, OCLREAD | OCLCPY, inw, inh,
+               (int) param->stridew, (int) param->strideh, pleft, pright, ptop, pbot,
+               NULL, (int) (param->poolw * param->poolh), OCLREAD | OCLWRITE,
+               o->data, o->width * o->height, OCLWRITE | OCLOUT);
     *out = o;
     
     return MLNO_ERR;
@@ -406,20 +355,20 @@ Parameters order:
     int insz = inw * inh;
     if (paramsw - 1 != channels * sizeof(PARAMS) / sizeof(double)) return MLSIZE_MISMATCH;
     
-    PARAMS *param = (PARAMS*) (params + 1);
-    
     Mat *o = (Mat *) malloc(sizeof(Mat));
     o->width = inw;
     o->height = inh;
     o->data = (double *) malloc(sizeof(double) * o->width * o->height);
     
-    // https://www.mathworks.com/help/deeplearning/ref/nnet.cnn.layer.batchnormalizationlayer.html
     int einsz = insz / channels;
-    for (int c = 0; c < channels; c++) {
-        for (int i = 0; i < einsz; i++) {
-            o->data[i + c * einsz] = param[c].scale * (in[i + c * einsz] - param[c].mean) / sqrt(param[c].variance + EPSIL) + param[c].offset;
-        }
-    }
+    
+    size_t gz[] = { einsz, channels };
+    
+    int e = run_kernel("bnorm", 2, gz, NULL,
+                       in, insz, OCLREAD | OCLCPY,
+                       einsz, channels,
+                       params, paramsw, OCLREAD | OCLCPY,
+                       o->data, insz, OCLWRITE | OCLOUT);
     
     *out = o;
     
@@ -463,13 +412,13 @@ int softmax(double *unused0, int unused1, int unused2,
     o->height = 1;
     o->data = (double *) malloc(sizeof(double) * insz);
     
-    // First, calculate the devisor
-    double devisor = 0;
-    for (int i = 0; i < insz; i++)
-        devisor += exp(in[i]);
+    size_t gz[] = { insz };
     
-    for (int i = 0; i < insz; i++)
-        o->data[i] = exp(in[i]) / devisor;
+    double *temp;
+    run_kernel("softmax", 1, gz, NULL, 
+               in, insz, OCLREAD | OCLCPY,
+               NULL, insz, OCLREAD | OCLWRITE,
+               o->data, insz, OCLWRITE | OCLOUT);
     
     *out = o;
     
@@ -477,15 +426,20 @@ int softmax(double *unused0, int unused1, int unused2,
 }
 
 int relu(double *unused0, int unused1, int unused2,
-         double *in, int iw, int ih, Mat **out) {
+         double *in, int inw, int inh, Mat **out) {
     
     Mat *o = (Mat *) malloc(sizeof(Mat));
-    o->width = iw;
-    o->height = ih;
-    o->data = (double *) malloc(sizeof(double) * iw * ih);
+    o->width = inw;
+    o->height = inh;
+    o->data = (double *) malloc(sizeof(double) * inw * inh);
     
-    for (int i = 0; i < iw * ih; i++)
-        o->data[i] = MAX(in[i], 0);
+    int insz = inw * inh;
+    
+    size_t gz[] = { insz };
+    
+    run_kernel("relu", 1, gz, NULL, 
+               in, insz, OCLREAD | OCLCPY,
+               o->data, insz, OCLWRITE | OCLOUT);
     
     *out = o;
     

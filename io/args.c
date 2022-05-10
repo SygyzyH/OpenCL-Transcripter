@@ -130,4 +130,3 @@ int ldbind(char const *filepath, double **res, int *len) {
     
     return 0;
 }
-// fwrite(fid, trainedNet.Layers(1, 1).AverageImage, 'double');

@@ -179,8 +179,6 @@ int stft(double *src, int sz, int framesize, int windowsize, int fftlen,
         return MINVALID_ARG;
     }
     int frames = ceil(((sz - framesize) / hopsize) + 1);
-    /*int fbins, frames;
-	stftwh(sz, framesize, hopsize, &fbins, &frames);*/
     
     double *r = (double *) malloc(sizeof(double) * fbins * frames);
     
@@ -190,10 +188,12 @@ int stft(double *src, int sz, int framesize, int windowsize, int fftlen,
                framesize, windowsize, hopsize, fbins, frames, sides,
                r, fbins * frames, OCLWRITE | OCLOUT);
     
-    *res = (Mat *) malloc(sizeof(Mat));
-    (*res)->width = frames; 
-    (*res)->height = fbins;
-    (*res)->data = r;
+    Mat *o = (Mat *) malloc(sizeof(Mat));
+    o->width = frames;
+    o->height = fbins;
+    o->data = r;
+    
+    *res = o;
     
     return MNO_ERR;
 }
@@ -202,7 +202,7 @@ int stft(double *src, int sz, int framesize, int windowsize, int fftlen,
 /*
 src - data source
 sz - size of data
-topdb - top decible allowed
+topdb - top decible allowed (-1 if DC)
 op - operation type
 returns 0 on success
 */
@@ -243,6 +243,18 @@ int amptodb(double **src, int sz, double topdb, int op) {
     }
     
     return MNO_ERR;
+}
+
+// Convert mel spectrograms to log-mel spectrograms.
+/*
+src - source data
+sz - size of source data
+*/
+void log10spec(double **src, int sz) {
+    double *dsrc = *src;
+    
+    for (int i = 0; i < sz; i++)
+        dsrc[i] = log10(dsrc[i] + EPSIL);
 }
 
 // Converts frequency to mel
@@ -354,14 +366,13 @@ int melspec(double *src, int sz, int fs, int framesize, int windowsize, int fftl
     *res = (Mat *) malloc(sizeof(Mat));
     (*res)->width = frames;
     (*res)->height = bands;
-    // TODO: So in matlab everything up to here works out perfectly...
-    // Could it be that the matrix multiplication is not working?
+    
     matmul(ft, frames, fbins, fban, fbins, bands, &((*res)->data));
     
     /* Convert amplitude to Decibels */
     
     // amptodb(&ft, fbins * frames, -1, SCALE_ONE);
-    // amptodb(&((*res)->data), (*res)->width * (*res)->heightm -1, SCALE_ONE);
+    // amptodb(&((*res)->data), (*res)->width * (*res)->height, -1, SCALE_ONE);
     
     /* Cleanup */
     
@@ -395,9 +406,9 @@ int ensuredims(Mat inp, int tw, int th, Mat **res) {
     if (res == NULL) return MNO_ERR;
     
     Mat *r = (Mat *) malloc(sizeof(Mat));
-    r->data = (double *) malloc(sizeof(double) * tw * th);
     r->width = tw;
     r->height = th;
+    r->data = (double *) malloc(sizeof(double) * tw * th);
     
     for (int i = 0; i < th; i++) {
         for (int j = 0; j < tw; j++) {

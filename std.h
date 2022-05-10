@@ -41,14 +41,21 @@
 #define _putsc_chooser(...) _putsc_2_3(__VA_ARGS__, _putsc_3, _putsc_2, )
 #define putsc(...) _putsc_chooser(__VA_ARGS__)(__VA_ARGS__) 
 
-#define _safe_1(e) ({int err; if ((err = e)) return err;})
-#define _safe_2(e, format) ({int err; if ((err = e)) { puts(format); return err; }})
-#define _safe_1_2(a1, a2, a3, ...) a3
-#define _safe_chooser(...) _safe_1_2(__VA_ARGS__, _safe_2, _safe_1, )
+// Statements and Declarations in Expressions is not standart in all compilers
+// Therefore, calling safe(...) is not guarenteed to be evaluated to anything
+// but a void, unless using GCC.
+#define _safe_1(e) ({ int __INTERNEL_ERROR_CONTAINER; if ((__INTERNEL_ERROR_CONTAINER = e)) return __INTERNEL_ERROR_CONTAINER; __INTERNEL_ERROR_CONTAINER; })
+#define _safe_2(e, format) ({ int __INTERNEL_ERROR_CONTAINER; if ((__INTERNEL_ERROR_CONTAINER = e)) { puts(format); return __INTERNEL_ERROR_CONTAINER; } __INTERNEL_ERROR_CONTAINER; })
+#define _safe_3(e, format, val) ({ int __INTERNEL_ERROR_CONTAINER; if ((__INTERNEL_ERROR_CONTAINER = e)) { printf(format, val); return __INTERNEL_ERROR_CONTAINER; } __INTERNEL_ERROR_CONTAINER; })
+#define _safe_1_2_3(a1, a2, a3, a4, ...) a4
+#define _safe_chooser(...) _safe_1_2_3(__VA_ARGS__, _safe_3, _safe_2, _safe_1, )
 #define safe(...) _safe_chooser(__VA_ARGS__)(__VA_ARGS__)
 
-#define _criticly_safe_1(e) ({int err; if ((err = e)) { abort(); }});
-#define _criticly_safe_2(e, format) ({int err; if ((err = e)) { puts("CRITICAL: " format); abort(); }})
+// Statements and Declarations in Expressions is not standart in all compilers
+// Therefore, calling criticly_safe(...) is not guarenteed to be evaluated to anything
+// but a void, unless using GCC.
+#define _criticly_safe_1(e) ({ int __INTERNEL_ERROR_CONTAINER; if ((__INTERNEL_ERROR_CONTAINER = e)) abort(); else __INTERNEL_ERROR_CONTAINER; });
+#define _criticly_safe_2(e, format) ({ int __INTERNEL_ERROR_CONTAINER; if ((__INTERNEL_ERROR_CONTAINER = e)) { puts("CRITICAL: " format); abort(); } __INTERNEL_ERROR_CONTAINER; })
 #define _criticly_safe_1_2(a1, a2, a3, ...) a3
 #define _criticly_safe_chooser(...) _criticly_safe_1_2(__VA_ARGS__, _criticly_safe_2, _criticly_safe_1, )
 #define criticly_safe(...) _criticly_safe_chooser(__VA_ARGS__)(__VA_ARGS__)

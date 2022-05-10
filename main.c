@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <time.h>
 
 #include "io/args.h"
 #include "io/audio.h"
@@ -97,11 +98,10 @@ softmax
     /* Testing */
     
     WAVC *wav;
-    pwav("./testing/dataset/Hebrew Build Converted/lo/temp1p3.wav", &wav, 2);
+    pwav("./testing/dataset/Hebrew Build Converted/lo/temp1p5.wav", &wav, 2);
     double *stftinp;
     wavtod(wav, &stftinp, 1);
     printf("%d Samples\n", wav->samples);
-    for (int i = 0; i < wav->samples / 100; i++) printfu("%.4e, ", stftinp[i]); putsu();
     
     Mat *minp;
     int framesize = (int) wav->hdr.samplerate * frameduration;
@@ -115,10 +115,18 @@ softmax
     // width to ensure each segment is of the same length.
     Mat *res;
     ensuredims(*minp, numhops, minp->height, &res);
+    free(minp->data);
+    free(minp);
     
+    // Convert to log-mel spectrogram
+    log10spec(&(res->data), res->width * res->height);
+    
+    // Currently: 0.1 seconds, 10 classifications per sec
     Mat *sclass;
+    clock_t t = clock();
     e = forwardpass(*machine, *res, &sclass);
-    printf("e: %d\n", e);
+    t = clock() - t;
+    printf("Forward pass time: %lf sec\n", ((double) t) / CLOCKS_PER_SEC);
     
     if (!e) {
         printf("Forward pass succesful.\nMachine result: %d x %d\n", 

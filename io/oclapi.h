@@ -33,6 +33,7 @@ typedef struct arg {
     size_t asize;
     // Temporary variable used during execution
     int _dsize;
+    int _islocal;
     int _flags;
     void *_host_data;
     cl_mem _device_data;

@@ -18,10 +18,6 @@ enum STFT_SIDES { ONE_SIDED=1, TWO_SIDED=2, TWO_SIDED_CENTERED=3 };
 enum DB_OPTYPE { SCALE_MAX, SCALE_ONE, SCALE_FIRST };
 enum MATH_ERR { MNO_ERR=0, MINVALID_ARG, MZERO_DIV, MSMALL_BUF, MUNINITIALIZED };
 
-#define stftw(framesize) ceil(framesize / 2 + 1)
-#define stfth(sz, framesize, hopsize) ceil(((sz - framesize) / hopsize) + 1)
-#define stftwh(sz, framesize, hopsize, w, h) { *w = stftw(framesize); *h = stfth(sz, framesize, hopsize); } 
-
 #define unpkmat(mat) (mat).data, (mat).width, (mat).height
 #define unpkmatp(mat) (mat)->data, (mat)->width, (mat)->height
 
@@ -32,6 +28,7 @@ typedef struct {
 } Mat;
 
 int amptodb(double **src, int sz, double topdb, int op);
+void log10spec(double **src, int sz);
 int stft(double *src, int sz, int framesize, int windowsize,
          int fftlen, int hopsize, int sides, Mat **res);
 int melspec(double *src, int sz, int fs, int framesize, int windowsize, int fftlen, 
