@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
+#include <Windows.h>
 
 #include "io/args.h"
 #include "io/audio.h"
@@ -8,6 +9,8 @@
 #include "math/math.h"
 #include "math/ml.h"
 #include "std.h"
+
+#define MACHINEOUTPUTS 12
 
 int init();
 int cln();
@@ -95,58 +98,194 @@ softmax
     double dfileduaration = 1;
     int numhops = ceil((dfileduaration - frameduration) / hopduration);
     
-    /* Testing */
+    /* Benchmark system */
+    // Benchmark system to figure out a good classification rate value.
+    // Calssification rate is the target rate at which the input will be sampled 
+    // (and calssified) per second.
     
     WAVC *wav;
-    pwav("./testing/dataset/Hebrew Build Converted/lo/temp1p5.wav", &wav, 2);
+    ldwav("Benchmark.wav", &wav, 2);
+    
+    // Start timing
+    clock_t t = clock();
+    
     double *stftinp;
     wavtod(wav, &stftinp, 1);
-    printf("%d Samples\n", wav->samples);
+    //for (int i = 0; i < wav->samples; i++) printfu("%lf ", stftinp[i]);
     
     Mat *minp;
     int framesize = (int) wav->hdr.samplerate * frameduration;
     int hopsize = (int) wav->hdr.samplerate * hopduration;
-    printf("samplerate: %d, framesize: %d, hopsize: %d\n", wav->hdr.samplerate, framesize, hopsize);
+    if (chkset(sets, DB))
+        printf("Standart samplerate: %d, framesize: %d, hopsize: %d\n",
+               wav->hdr.samplerate, framesize, hopsize);
     
     melspec(stftinp, wav->samples, wav->hdr.samplerate, framesize, framesize, 512, hopsize, 40, 50, 7000, &minp);
     
     // Each input's length may be smaller than one second, but the machine
-    // can only accept a fixed size. for this reason, there needs to be padding on
+    // can only accept a fixed size. There needs to be padding on
     // width to ensure each segment is of the same length.
-    Mat *res;
-    ensuredims(*minp, numhops, minp->height, &res);
+    Mat *pminp;
+    ensuredims(*minp, numhops, minp->height, &pminp);
     free(minp->data);
     free(minp);
     
     // Convert to log-mel spectrogram
-    log10spec(&(res->data), res->width * res->height);
+    log10spec(&(pminp->data), pminp->width * pminp->height);
     
-    // Currently: 0.1 seconds, 10 classifications per sec
     Mat *sclass;
-    clock_t t = clock();
-    e = forwardpass(*machine, *res, &sclass);
-    t = clock() - t;
-    printf("Forward pass time: %lf sec\n", ((double) t) / CLOCKS_PER_SEC);
+    e = forwardpass(*machine, *pminp, &sclass);
+    free(pminp);
+    criticly_safe(e, "Benchmark failed.");
     
-    if (!e) {
-        printf("Forward pass succesful.\nMachine result: %d x %d\n", 
-               sclass->width, sclass->height);
+    // End timing
+    t = clock() - t;
+    double time = ((double) t) / CLOCKS_PER_SEC;
+    int classrate = (int) (0.8 * 1 / time);
+    FRAMESPERSECOND = classrate;
+    if (chkset(sets, DB))
+        printf("Benchmark finished, round-about time: %lf seconds, allowing for classification rate of ~%d.\n",
+               time, classrate);
+    
+    if (chkset(sets, DB)) {
+        double max = sclass->data[0];
+        int maxi = 0;
+        
+        puts("Benchmark results:");
         for (int i = 0; i < sclass->height; i++) {
             for (int j = 0; j < sclass->width; j++) {
+                if (sclass->data[j + i * sclass->width] > max) {
+                    max = sclass->data[j + i * sclass->width];
+                    maxi = j + i * sclass->width;
+                }
+                
                 printfu("%lf, ", sclass->data[j + i * sclass->width]);
             } putsu();
-        } putsu();
-    }
+        }
+        
+        printf("Chosen linear index #%d with confidance %.2lf%%. (maps to \"%s\")\n",
+               maxi, max * 100, "TODO: map index to string");
+    } free(sclass);
     
     /* Main loop */
     
     // Start audio
+    safe(auinit());
     safe(austrt());
     
-    getchar();
+    WAVC *audioIn = NULL;
+    // Make a buffer that can hold up to one second of audio data
+    // The buffer will be rolled to contain the last one second of recordings
+    double *audiobuf = (double *) calloc(SAMPLERATE, sizeof(double));
+    int *ibuf = (int *) malloc(classrate / 2 * sizeof(int));
+    for (int i = 0; i < classrate / 2; i++) ibuf[i] = MACHINEOUTPUTS - 1;
+    double *probbuf = (double *) calloc((size_t) MACHINEOUTPUTS * classrate / 2, sizeof(double));
+    
+    int curbuf = -1;
+    int x = 300;
+    while (x-- != 0) {
+        if (curbuf != aucurbuf) {
+            curbuf = aucurbuf;
+            WAVEHDR whdr = augetb();
+            audioIn = frmtowav(formatex, (unsigned char *) whdr.lpData, (unsigned int) whdr.dwBufferLength);
+            
+            double *audioInnorm;
+            wavtod(audioIn, &audioInnorm, 1);
+            
+            // Move the audio buffer back and append the audio data 
+            for (int i = 0; i < SAMPLERATE; i++) {
+                if (i < SAMPLERATE - audioIn->samples)
+                    audiobuf[i] = audiobuf[i + audioIn->samples];
+                else
+                    audiobuf[i] = audioInnorm[i - (SAMPLERATE - audioIn->samples)];
+            }
+            
+            Mat *machineInput = NULL;
+            framesize = (int) wav->hdr.samplerate * frameduration;
+            hopsize = (int) wav->hdr.samplerate * hopduration;
+            safe(melspec(audiobuf, SAMPLERATE, audioIn->hdr.samplerate, framesize, framesize, 512, hopsize, 40, 50, 7000, &machineInput), "Mel-spectrogram failed");
+            
+            Mat *pmachineInput;
+            ensuredims(*machineInput, numhops, machineInput->height, &pmachineInput);
+            
+            log10spec(&(pmachineInput->data), pmachineInput->width * pmachineInput->height);
+            
+            Mat *machineOutput;
+            safe(forwardpass(*machine, *pmachineInput, &machineOutput), "Forward pass failed");
+            
+            double max = machineOutput->data[0];
+            int maxi = 0;
+            
+            // Move the buffers back
+            for (int i = 0; i < (classrate / 2) - 1; i++) 
+                ibuf[i] = ibuf[i + 1];
+            for (int i = 0; i < (int) (classrate / 2) - 1; i++) {
+                for (int j = 0; j < MACHINEOUTPUTS; j++) {
+                    probbuf[j + i * MACHINEOUTPUTS] = probbuf[j + (i + 1) * MACHINEOUTPUTS];
+                }
+            }
+            
+            for (int i = 0; i < machineOutput->width; i++) {
+                if (machineOutput->data[i] > max) {
+                    max = machineOutput->data[i];
+                    maxi = i;
+                }
+                
+                probbuf[i + ((classrate / 2) - 1) * MACHINEOUTPUTS] = machineOutput->data[i];
+            }
+            
+            ibuf[((int) classrate / 2) - 1] = maxi;
+            
+            // display the corret label
+            // How many times did every label appear in label buffer
+            int ibufocc[MACHINEOUTPUTS];
+            for (int i = 0; i < MACHINEOUTPUTS; i++) ibufocc[i] = 0;
+            for (int i = 0; i < (int) classrate / 2; i++) ibufocc[ibuf[i]]++;
+            // What is the label that appeared the most
+            int maxibuf = MACHINEOUTPUTS - 1;
+            for (int i = 0; i < MACHINEOUTPUTS; i++) if (ibufocc[i] > ibufocc[maxibuf]) maxibuf = i;
+            // What is that labels highest probability recently
+            double maxprob = 0;
+            for (int i = 0; i < (int) classrate / 2; i++) maxprob = MAX(maxprob, probbuf[maxibuf + i * MACHINEOUTPUTS]);
+            if (ibufocc[maxibuf] > ceil(classrate * 0.2) && maxprob > 0.7) {
+                switch (maxibuf) {
+                    case 0: classname = "at"; break;
+                    case 1: classname = "ata"; break;
+                    case 2: classname = "emcha"; break;
+                    case 3: classname = "ken"; break;
+                    case 4: classname = "lechoo"; break;
+                    case 5: classname = "lo"; break;
+                    case 6: classname = "piteaach"; break;
+                    case 7: classname = "radood"; break;
+                    case 8: classname = "riteaach"; break;
+                    case 9: classname = "shafach"; break;
+                    case 10: classname = "unknown"; break;
+                    default: classname = "None"; break;
+                }
+            } else classname = "None";
+            // printfu("Prediction: %s (#%d)", classname, maxibuf);
+            
+            free(machineOutput->data);
+            free(machineOutput);
+            free(pmachineInput->data);
+            free(pmachineInput);
+            free(machineInput->data);
+            free(machineInput);
+            // DON'T free audioIn->data, since its used by audio.c
+            free(audioIn);
+        } else x++;
+    }
+    free(audiobuf);
+    free(ibuf);
+    free(probbuf);
+    // getchar();
     
     /* Cleanup */
     criticly_safe(cln(), "Cleanup failure.");
+    
+    /*puts("Done\naudiobuf:");
+    for (int i = 0; i < SAMPLERATE; i++) printfu("%lf ", audiobuf[i]);
+    puts("Done");*/
     
     putsc(chkset(sets, DB), "Gracefully resolved!");
     
@@ -154,7 +293,6 @@ softmax
 }
 
 int init() {
-    safe(auinit());
     safe(ocinit());
     safe(mainit());
     safe(mlinit());

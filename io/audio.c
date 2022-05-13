@@ -7,9 +7,13 @@
 HWAVEIN hWaveIn;
 HWAVEOUT hWaveOut;
 WAVEHDR header [NUM_BUF];
+WAVEFORMATEX formatex;
 
-int ibuf = 0;
-short int *pbuf;
+int aucurbuf = 0;
+int FRAMESPERSECOND = 20;
+char *classname = "";
+
+char *pbuf;
 int dlock = 1;
 int isauinit = 0;
 
@@ -18,10 +22,10 @@ void prntbr();
 
 // Prints the bar at the bottom of the CLI
 void prntbr() {
-    // Short int minimal limit
+    // Short int min limit
     short int max = -32768;
-    for (int i = 0; i < header[ibuf].dwBufferLength / BITRATE / 8; i++) {
-        short int cur = ((short int *)(header[ibuf].lpData))[i];
+    for (int i = 0; i < header[aucurbuf].dwBufferLength / BITRATE / 8; i++) {
+        short int cur = ((short int *)(header[aucurbuf].lpData))[i];
         if (cur > max)
             max = cur;
     }
@@ -43,8 +47,7 @@ void prntbr() {
     }
     block[CLICAP] = '\0';
     
-    printf("%c[%s> Prediction: [ %s ]", chkset(sets, CS) ? '\n' : '\r', block, "Unknown");
-    fflush(stdout);
+    printfu("%c[%s> Prediction: [ %s ]    ", chkset(sets, CS) ? '\n' : '\r', block, classname);
 }
 
 // Callback function to handle emptying the buffer when its filled
@@ -77,9 +80,9 @@ A bandaid fix is to implement a mutex, however this mutex
         prntbr();
     
     if (chkset(sets, FB))
-        waveOutWrite(hWaveOut, &header[ibuf], sizeof(WAVEHDR));
-    if (++ibuf == NUM_BUF) ibuf = 0;
-    waveInAddBuffer(hWaveIn, &header[ibuf], sizeof(WAVEHDR));
+        waveOutWrite(hWaveOut, &header[aucurbuf], sizeof(WAVEHDR));
+    if (++aucurbuf == NUM_BUF) aucurbuf = 0;
+    waveInAddBuffer(hWaveIn, &header[aucurbuf], sizeof(WAVEHDR));
 }
 
 // Initialize things for winapi
@@ -98,27 +101,30 @@ int auinit() {
     format.nBlockAlign = format.nChannels * format.wBitsPerSample / 8;
     format.nAvgBytesPerSec = format.nSamplesPerSec * format.nChannels * format.wBitsPerSample / 8;
     format.cbSize = 0;
+    formatex = format;
     
-    // Buffer size for each buffer. Once this fills up (1 / SAMPLEFRAME seconds)
-    // the buffer should fill up and the driver will trigger CALLBACK. 
-    size_t bpbuff = SAMPLERATE * BITRATE / 8 / FRAMESPERSECOND;
+    // Buffer size for each buffer. Once this fills up (1 / FRAMESPERSECOND seconds)
+    // the driver will trigger CALLBACK. 
+    size_t bpbuff = (BITRATE / 8) * SAMPLERATE / FRAMESPERSECOND;
+    printf("samples per frame: %d\n", bpbuff);
     // Init cyclical buffer
-    pbuf = (short int *) malloc(bpbuff * NUM_BUF * BITRATE / 8);
+    pbuf = (char *) malloc(bpbuff * NUM_BUF);
     
     // Open devices
-    err += waveInOpen(&hWaveIn, WAVE_MAPPER, &format, (DWORD_PTR)whndl, 0, CALLBACK_FUNCTION) != MMSYSERR_NOERROR;
+    err += waveInOpen(&hWaveIn, WAVE_MAPPER, &format, (DWORD_PTR) whndl, 0, CALLBACK_FUNCTION | WAVE_FORMAT_DIRECT) != MMSYSERR_NOERROR;
     if (chkset(sets, FB))
-        err += waveOutOpen(&hWaveOut, WAVE_MAPPER, &format, (DWORD_PTR)NULL, 0, CALLBACK_FUNCTION) != MMSYSERR_NOERROR;
+        err += waveOutOpen(&hWaveOut, WAVE_MAPPER, &format, (DWORD_PTR) NULL, 0, WAVE_FORMAT_DIRECT) != MMSYSERR_NOERROR;
     
     // Init headers
     for (int i = 0; i < NUM_BUF; i++) {
         header[i].lpData = (LPSTR) &pbuf[i * bpbuff];
-        header[i].dwBufferLength = bpbuff * sizeof(*pbuf);
+        header[i].dwBufferLength = bpbuff;
+        header[i].dwBytesRecorded=0;
+        header[i].dwUser = 0L;
         header[i].dwFlags = 0;
         header[i].dwLoops = 0;
         err += waveInPrepareHeader(hWaveIn, &header[i], sizeof(WAVEHDR)) != MMSYSERR_NOERROR;
     }
-    err += waveInAddBuffer(hWaveIn, &header[0], sizeof(WAVEHDR)) != MMSYSERR_NOERROR;
     
     if (!err) isauinit = 1;
     
@@ -135,11 +141,22 @@ returns 0 on success
 int austrt() {
     int err;
     if (!isauinit) return 1;
-    err = waveInStart(hWaveIn) != MMSYSERR_NOERROR;
+    err = waveInAddBuffer(hWaveIn, &header[0], sizeof(WAVEHDR)) != MMSYSERR_NOERROR;
+    err += waveInStart(hWaveIn) != MMSYSERR_NOERROR;
     if (chkset(sets, DB))
         printf("%s: Device start %s\n", __FILE__, err? "UNSUCCESSFUL" : "successful");
     
     return err;
+}
+
+// Returns the current buffer 
+/* 
+ returns WAVEHDR of the current buffer
+*/
+WAVEHDR augetb() {
+    int i = aucurbuf - 1;
+    if (i < 0) i = NUM_BUF - 1;
+    return header[i];
 }
 
 // Cleanup winapi
@@ -147,12 +164,14 @@ int austrt() {
 returns 0 on success
 */
 int aucln() {
+    // TODO: There seems to be a problem here. After one run, buffer data is somehow corrupt (?)
     int err = 0;
     
     // TODO: Bandaid. See whndl
     dlock = 0;
     err += waveInStop(hWaveIn) != MMSYSERR_NOERROR;
     err += waveInReset(hWaveIn) != MMSYSERR_NOERROR;
+    for (int i = 0; i < NUM_BUF; i++) err += waveInUnprepareHeader(hWaveIn, &header[i], sizeof(WAVEHDR));
     err += waveInClose(hWaveIn) != MMSYSERR_NOERROR;
     
     if(chkset(sets, FB)) {
@@ -174,7 +193,7 @@ int aucln() {
 file - internal custom header for .wav files
 returns 0 on success
 */
-int playwav(WAVC *file) {
+int playwav(WAVC *file, int blocking) {
     int e = 0;
     
     WAVEFORMATEX format;
@@ -199,7 +218,8 @@ int playwav(WAVC *file) {
     
     e += waveOutWrite(hwo, &hdr, sizeof(WAVEHDR)) != MMSYSERR_NOERROR;
     
-    Sleep((int) 1000 * file->osize / file->hdr.byterate);
+    if (blocking)
+        Sleep((int) 1000 * file->osize / file->hdr.byterate);
     
     e += waveOutReset(hwo) != MMSYSERR_NOERROR;
     e += waveOutClose(hwo) != MMSYSERR_NOERROR;

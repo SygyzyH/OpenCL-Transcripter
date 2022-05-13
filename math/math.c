@@ -412,7 +412,7 @@ int ensuredims(Mat inp, int tw, int th, Mat **res) {
     
     for (int i = 0; i < th; i++) {
         for (int j = 0; j < tw; j++) {
-            if (j < pleft || j > pright || i < ptop || i > pbot)
+            if (j < pleft || j > inp.width + pright || i < ptop || i > inp.height + pbot)
                 r->data[j + i * tw] = 0;
             else
                 r->data[j + i * tw] = inp.data[j - pleft + (i - ptop) * inp.width];

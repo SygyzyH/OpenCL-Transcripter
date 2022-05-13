@@ -29,65 +29,6 @@ bool oclinit = false;
 
 Klist *kernels = NULL;
 
-// Initialize OpenCL and prepare registery
-/*
-returns 0 on success
-*/
-int ocinit() {
-    int err;
-    
-    err = clGetPlatformIDs(1, &cpPlatform, NULL);
-    err = clGetDeviceIDs(cpPlatform, CL_DEVICE_TYPE_GPU, 1, &device_id, NULL);
-    // If no GPU was found, use the CPU instead. Cant see how this would ever
-    // fail, since the docs state the CPU is the host device - meaning, if this
-    // code is running, there must be a CPU to run it. 
-    if (err == CL_DEVICE_NOT_FOUND) {
-        putsc(chkset(sets, DB), "Failed to get a GPU device, running un-accelerated.");
-        clGetDeviceIDs(cpPlatform, CL_DEVICE_TYPE_CPU, 1, &device_id, NULL);
-    }
-    
-    context = clCreateContext(0, 1, &device_id, NULL, NULL, &err);
-    queue = clCreateCommandQueue(context, device_id, 0, &err);
-    
-    putsc(chkset(sets, DB), "Initialized OpenCL API successfuly.");
-    
-    oclinit = true;
-    
-    return OCLNO_ERR;
-}
-
-// Cleanup registery
-/*
-returns 0 on success
-*/
-int occln() {
-    if (!oclinit) return OCLUNINITIALIZED;
-    
-    Klist *k = kernels;
-    
-    while (k != NULL) {
-        // TODO: Programs will repeat if multiple kernels are added at once.
-        // This will cause clReleaseProgram to return an error. This is not
-        // problematic per say but not best practice and should be avoided.
-        cl_program prog;
-        clGetKernelInfo(k->kernel, CL_KERNEL_PROGRAM, sizeof(cl_program), &prog, NULL);
-        clReleaseProgram(prog);
-        clReleaseKernel(k->kernel);
-        
-        Klist *oldk = k;
-        free(k->argv);
-        k = k->next;
-        free(oldk);
-    }
-    
-    clReleaseCommandQueue(queue);
-    clReleaseContext(context);
-    
-    putsc(chkset(sets, DB), "Cleanup successful.");
-    
-    return OCLNO_ERR;
-}
-
 // Returns error as string
 /*
 error - error int
@@ -168,6 +109,67 @@ const char *clGetErrorString(cl_int error)
         case -1005: return "CL_D3D10_RESOURCE_NOT_ACQUIRED_KHR";
         default: return "Unknown OpenCL error";
     }
+}
+
+// Initialize OpenCL and prepare registery
+/*
+returns 0 on success
+*/
+int ocinit() {
+    int err;
+    
+    safe((err = clGetPlatformIDs(1, &cpPlatform, NULL)), "Failed to get platform: %s\n", clGetErrorString(err));
+    safe((err = clGetDeviceIDs(cpPlatform, CL_DEVICE_TYPE_DEFAULT, 1, &device_id, NULL)), "Failed to get device id: %s\n", clGetErrorString(err));
+    // If no GPU was found, use the CPU instead. Cant see how this would ever
+    // fail, since the docs state the CPU is the host device - meaning, if this
+    // code is running, there must be a CPU to run it. 
+    if (err == CL_DEVICE_NOT_FOUND) {
+        putsc(chkset(sets, DB), "Failed to get a GPU device, running un-accelerated.");
+        clGetDeviceIDs(cpPlatform, CL_DEVICE_TYPE_CPU, 1, &device_id, NULL);
+    }
+    
+    context = clCreateContext(0, 1, &device_id, NULL, NULL, &err);
+    safe(err, "Failed to create context: %s\n", clGetErrorString(err));
+    queue = clCreateCommandQueue(context, device_id, 0, &err);
+    safe(err, "Failed to create queue: %s\n", clGetErrorString(err));
+    
+    putsc(chkset(sets, DB), "Initialized OpenCL API successfuly.");
+    
+    oclinit = true;
+    
+    return OCLNO_ERR;
+}
+
+// Cleanup registery
+/*
+returns 0 on success
+*/
+int occln() {
+    if (!oclinit) return OCLUNINITIALIZED;
+    
+    Klist *k = kernels;
+    
+    while (k != NULL) {
+        // TODO: Programs will repeat if multiple kernels are added at once.
+        // This will cause clReleaseProgram to return an error. This is not
+        // problematic per say but not best practice and should be avoided.
+        cl_program prog;
+        clGetKernelInfo(k->kernel, CL_KERNEL_PROGRAM, sizeof(cl_program), &prog, NULL);
+        clReleaseProgram(prog);
+        clReleaseKernel(k->kernel);
+        
+        Klist *oldk = k;
+        free(k->argv);
+        k = k->next;
+        free(oldk);
+    }
+    
+    clReleaseCommandQueue(queue);
+    clReleaseContext(context);
+    
+    putsc(chkset(sets, DB), "Cleanup successful.");
+    
+    return OCLNO_ERR;
 }
 
 // Register a kerenel so it can be run

@@ -16,7 +16,7 @@ typedef struct {
     /* 1: PCM, 3: IEEE float, 6: 8bit A law, 7 - 8bit mu law. 
 only type 1 is supported. */
     uint16_t channels; // channel count. After parse, would always be 1.
-    uint32_t samplerate; // samplerate. Expected 44100 (CD)
+    uint32_t samplerate; // samplerate. Expected 16000
     uint32_t byterate; // byterate = SampleRate * NumChannels * BitsPerSample / 8
     uint16_t blockalign; // block align. NumChannels * BitsPerSample / 8
     uint16_t bitspsample; // bits per sample. Expected 16 bits
@@ -29,13 +29,13 @@ typedef struct {
     uint32_t osize;
     WAVCH hdr;
     
-    unsigned long int samples; 
+    unsigned long int samples;
     unsigned short int ssize;
     unsigned char *data;
 } WAVC;
 
 WAVC* frmtowav(WAVEFORMATEX format, unsigned char *data, unsigned int dsize);
-int pwav(char *fname, WAVC **res, int nchn);
+int ldwav(char *fname, WAVC **res, int nchn);
 int wavtod(WAVC *src, double **res, int norm);
 
 #endif //FPARSE_H

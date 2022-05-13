@@ -7,7 +7,7 @@
 #include "args.h"
 #include "../math/math.h"
 
-// Read .wav file, prepare it, and return its data to user. 
+// Load .wav file, prepare it, and return its data to user. 
 // (Will also play it if debug flag is set)
 /*
 fname - file name of the .wav file to be played
@@ -15,7 +15,7 @@ res - result of the parsing. Automaticly allocated
 nchn - number of channels requested, either 1 or 2. If channel size of the file doesn't match, the data will be modified to match
 returns 0 on success
 */
-int pwav(char *fname, WAVC **res, int nchn) {
+int ldwav(char *fname, WAVC **res, int nchn) {
     FILE *file = fopen(fname, "rb");
     if (file == NULL) return WOPEN_ERR;
     
@@ -33,8 +33,8 @@ int pwav(char *fname, WAVC **res, int nchn) {
     char *tdchnkh = (char *) malloc(5);
     memcpy(tdchnkh, cur->hdr.dchunkh, 4);
     tdchnkh[4] = 0;
-    // TODO: Not 100% this is on spec, since permutations are also included (such as "LRfl")
-    // Should be good enough though
+    // TODO: Not 100% sure this is on spec, since permutations are also 
+    // included (such as "LRfl"). Should be good enough though
     while (strlen(tdchnkh) == 0 || !strstr("DATAdataFLLRfllr", tdchnkh)) {
         fseek(file, -3, SEEK_CUR);
         
@@ -96,12 +96,14 @@ int pwav(char *fname, WAVC **res, int nchn) {
     
     fclose(file);
     
-    if (chkset(sets, FB)) {
+    // TODO: Something here is taking too much time,
+    // and messing with the whole winmm interface. And its not the Sleep().
+    /*if (chkset(sets, FB)) {
         if (chkset(sets, DB))
             printf("%s: Playing \"%s\"\n", __FILE__, fname);
         
-        playwav(cur);
-    }
+        playwav(cur, 0);
+    }*/
     
     return WNO_ERR;
 }
@@ -131,7 +133,7 @@ WAVC* frmtowav(WAVEFORMATEX format, unsigned char *data, unsigned int dsize) {
         res->hdr.dchunkh[i] = "DATA"[i];
     res->hdr.dsize = dsize;
     
-    res->samples = 8 * dsize / res->hdr.channels * res->hdr.bitspsample;
+    res->samples = 8 * dsize / (res->hdr.channels * res->hdr.bitspsample);
     res->ssize = res->hdr.channels * res->hdr.bitspsample / 8;
     res->data = data;
     
