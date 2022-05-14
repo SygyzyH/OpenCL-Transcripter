@@ -1,3 +1,7 @@
+#ifndef _OCLAPI_INCLUDE_SOURCE
+#define _OCLAPI_INCLUDE_SOURCE(source) source
+#endif
+_OCLAPI_INCLUDE_SOURCE(
 __kernel void matmul(__global double *a, __global double *b, unsigned int aw, unsigned int ah, unsigned int bw, __global double *res) {
 	int gw = get_global_id(0);
 	int gh = get_global_id(1);
@@ -37,3 +41,4 @@ __kernel void matadds(__global double *a, double s, unsigned int w, unsigned int
 
 	res[gw + gh * w] = a[gw + gh * w] + s;
 }
+)

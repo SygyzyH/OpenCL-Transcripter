@@ -1,8 +1,13 @@
+#ifndef _OCLAPI_INCLUDE_SOURCE
+#define _OCLAPI_INCLUDE_SOURCE(source) source
+#endif
+_OCLAPI_INCLUDE_SOURCE(
 void sumArray(__local double **tmp, int bsize, int li);
 
 #define MAX(X, Y) (((X) > (Y)) ? (X) : (Y))
 #define MIN(X, Y) (((X) < (Y)) ? (X) : (Y))
 #define CLAMP(BOT, A, TOP) (MIN(MAX(BOT, A), TOP))
+
 __kernel void conv2d(__global double *in, int inw, int inh, int stridew, int strideh,
                      int pleft, int pright, int ptop, int pbot, __local double *sum, 
                      __global double *bias, __global double *weights, __global double *res) {
@@ -179,3 +184,4 @@ void sumArray(__local double **tmp, int bsize, int li) {
     // Ensure output is ready once the function returns
     barrier(CLK_LOCAL_MEM_FENCE);
 }
+)

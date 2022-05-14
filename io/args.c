@@ -64,10 +64,12 @@ int hndl_set(int argc, char *argv[]) {
         }
     }
     
-    putsc(chkset(res, OK), "Argument parse successful.");
-    putsc(!chkset(res, OK), "Argument parse unsuccessful.");
-    
-    printfc(out != NULL && chkset(res, DB), "Outputting transcript to \"%s\"\n", out);
+    if (chkset(res, DB)) {
+        putsc(chkset(res, OK), "Argument parse successful.");
+        putsc(!chkset(res, OK), "Argument parse unsuccessful.");
+        
+        printfc(out != NULL, "Outputting transcript to \"%s\"\n", out);
+    }
     
     return res;
 }

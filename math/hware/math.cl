@@ -1,3 +1,7 @@
+#ifndef _OCLAPI_INCLUDE_SOURCE
+#define _OCLAPI_INCLUDE_SOURCE(source) source
+#endif
+_OCLAPI_INCLUDE_SOURCE(
 inline double hamming(int x, int windowsize, double alpha) {
 	/* Hamming window (includes Hanning) for windowing */
 	if (windowsize == 1) return 1;
@@ -33,3 +37,4 @@ int fbins, int frames, int sides, __global double *res) {
 		res[frame + (offset % fbins) * frames] = sumr * sumr + sumi * sumi;
 	}
 }
+)

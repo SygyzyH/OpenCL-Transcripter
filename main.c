@@ -111,7 +111,6 @@ softmax
     
     double *stftinp;
     wavtod(wav, &stftinp, 1);
-    //for (int i = 0; i < wav->samples; i++) printfu("%lf ", stftinp[i]);
     
     Mat *minp;
     int framesize = (int) wav->hdr.samplerate * frameduration;
@@ -182,8 +181,11 @@ softmax
     double *probbuf = (double *) calloc((size_t) MACHINEOUTPUTS * classrate / 2, sizeof(double));
     
     int curbuf = -1;
-    int x = 300;
-    while (x-- != 0) {
+    
+    // Start timing
+    t = clock();
+    double seconds = 20;
+    while (((double) (clock() - t)) / CLOCKS_PER_SEC < seconds) {
         if (curbuf != aucurbuf) {
             curbuf = aucurbuf;
             WAVEHDR whdr = augetb();
@@ -240,6 +242,7 @@ softmax
             // How many times did every label appear in label buffer
             int ibufocc[MACHINEOUTPUTS];
             for (int i = 0; i < MACHINEOUTPUTS; i++) ibufocc[i] = 0;
+            // Neat O(n) algorithm to do mode()
             for (int i = 0; i < (int) classrate / 2; i++) ibufocc[ibuf[i]]++;
             // What is the label that appeared the most
             int maxibuf = MACHINEOUTPUTS - 1;
@@ -273,7 +276,7 @@ softmax
             free(machineInput);
             // DON'T free audioIn->data, since its used by audio.c
             free(audioIn);
-        } else x++;
+        }
     }
     free(audiobuf);
     free(ibuf);

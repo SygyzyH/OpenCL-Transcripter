@@ -6,6 +6,7 @@
 
 #include "math.h"
 #include "../io/args.h"
+#define OCLAPI_STATIC_SOURCE
 #include "../io/oclapi.h"
 #include "../std.h"
 
@@ -19,17 +20,27 @@ returns 0 on success
 */
 int mainit() {
     int err;
-    char *mprog = ldfile(MAT_PROG);
-    err = register_from_src(&(const char *) { mprog }, 5, "matadd", "matsub", "matmul", "matadds", "matmuls");
-    free(mprog);
+    
+    char *mprog;
+    
+#define FILENAME MAT_PROG
+    mprog = 
+#include "../io/statichack.h"
+    err = register_from_src(&(const char *) { mprog }, 5, 
+                            "matadd", "matsub", "matmul", "matadds", "matmuls");
+    OCLAPI_FREE_IF_STATIC;
     noerr(err);
     
-    mprog = ldfile(MATH_PROG);
+#define FILENAME MATH_PROG
+    mprog = 
+#include "../io/statichack.h"
     err = register_from_src(&(const char *) { mprog }, 1, "stft");
-    free(mprog);
+    
+    OCLAPI_FREE_IF_STATIC;
     noerr(err);
     
-    puts("MATH_H: Initialized math successfuly.");
+    if (chkset(sets, DB))
+        puts("Initialized math successfuly.");
     
     minit = true;
     

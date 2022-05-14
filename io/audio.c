@@ -106,7 +106,6 @@ int auinit() {
     // Buffer size for each buffer. Once this fills up (1 / FRAMESPERSECOND seconds)
     // the driver will trigger CALLBACK. 
     size_t bpbuff = (BITRATE / 8) * SAMPLERATE / FRAMESPERSECOND;
-    printf("samples per frame: %d\n", bpbuff);
     // Init cyclical buffer
     pbuf = (char *) malloc(bpbuff * NUM_BUF);
     
@@ -119,7 +118,7 @@ int auinit() {
     for (int i = 0; i < NUM_BUF; i++) {
         header[i].lpData = (LPSTR) &pbuf[i * bpbuff];
         header[i].dwBufferLength = bpbuff;
-        header[i].dwBytesRecorded=0;
+        header[i].dwBytesRecorded = 0;
         header[i].dwUser = 0L;
         header[i].dwFlags = 0;
         header[i].dwLoops = 0;
@@ -171,8 +170,8 @@ int aucln() {
     dlock = 0;
     err += waveInStop(hWaveIn) != MMSYSERR_NOERROR;
     err += waveInReset(hWaveIn) != MMSYSERR_NOERROR;
-    for (int i = 0; i < NUM_BUF; i++) err += waveInUnprepareHeader(hWaveIn, &header[i], sizeof(WAVEHDR));
     err += waveInClose(hWaveIn) != MMSYSERR_NOERROR;
+    for (int i = 0; i < NUM_BUF; i++) err += waveInUnprepareHeader(hWaveIn, &header[i], sizeof(WAVEHDR));
     
     if(chkset(sets, FB)) {
         err += waveOutReset(hWaveOut) != MMSYSERR_NOERROR;

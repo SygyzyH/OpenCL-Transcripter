@@ -3,6 +3,7 @@
 #include <time.h>
 
 #include "../io/args.h"
+#define OCLAPI_STATIC_SOURCE
 #include "../io/oclapi.h"
 #include "math.h"
 #include "ml.h"
@@ -24,13 +25,18 @@ returns 0 on success
 */
 int mlinit() {
     int err;
-    char *mprog = ldfile(ML_PROG);
+    
+    char *mprog;
+#define FILENAME ML_PROG
+    mprog =
+#include "../io/statichack.h"
     err = register_from_src(&(const char *) { mprog }, 5, 
                             "relu", "bnorm", "softmax", "maxpool", "conv2d");
-    free(mprog);
+    OCLAPI_FREE_IF_STATIC;
     safe(err);
     
-    puts("ML_H: Initialized ml successfuly.");
+    if (chkset(sets, DB))
+        puts("Initialized ml successfuly.");
     
     mlinited = true;
     

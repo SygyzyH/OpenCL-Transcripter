@@ -10,17 +10,10 @@
 #include <CL/cl.h>
 #endif
 
-#define DEBUG
-
-#ifdef DEBUG
-#define wrap(e) ( e? printf("Err %d\n", e) : 0 )
-#define wrapf(func, ...) { int e = func(__VA_ARGS__); warp(e) }
-#else
-#define wrap(e) 0
-#define wrapf(func, ...) func(__VA_ARGS__)
-#endif
-
 #define RETTYPE_SIZE 64
+
+#define __OCLAPI_INCLUDE_SOURCE(source) #source
+#define _OCLAPI_INCLUDE_SOURCE(source) __OCLAPI_INCLUDE_SOURCE(source)
 
 enum _OCLAPI_MEM_OP { _OCLCPY, _OCLREAD, _OCLWRITE, _OCLOUT };
 enum OCLAPI_MEM { OCLCPY=1 << _OCLCPY, OCLREAD=1 << _OCLREAD, OCLWRITE=1 << _OCLWRITE, OCLOUT=1 << _OCLOUT };

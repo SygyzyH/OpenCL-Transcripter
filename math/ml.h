@@ -5,7 +5,7 @@
 
 #include "../std.h"
 
-#define ML_PROG "./math/hware/ml.c" 
+#define ML_PROG "../math/hware/ml.cl"
 
 enum ML_ERR { MLNO_ERR=0, MLINVALID_ARG, MLLAYER_ERR, MLSIZE_MISMATCH };
 enum PAD_TYPE { SAME=0, NONE=1 };

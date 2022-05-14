@@ -5,8 +5,8 @@
 #ifndef MATH_H
 #define MATH_H
 
-#define MAT_PROG "./math/hware/mat.cl"
-#define MATH_PROG "./math/hware/math.cl"
+#define MAT_PROG "../math/hware/mat.cl"
+#define MATH_PROG "../math/hware/math.cl"
 
 #define MAX(X, Y) (((X) > (Y)) ? (X) : (Y))
 #define MIN(X, Y) (((X) < (Y)) ? (X) : (Y))
