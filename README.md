@@ -24,6 +24,22 @@ By default, `build.bat` will also run the program with the debug `-d` flag.
 - ~~`-o`-: writes output to file~~ obselete, simply piping the result using bash is sufficiant.
 - ~~`-f`: enables live auditory feedback~~ feedback is always displayed visually in the CLI.
 
+Running the program will show a volume bar, along side the current prediction. If the current prediction is empty, the machine assumes
+no word is beign said. Otherwise, the classified word will be displayed. 
+The ten word bins are:
+- at
+- ata
+- emcha
+- ken
+- lo
+- piteaach
+- radood
+- riteaach
+- shafach
+
+The program will run for roughly **ten seconds** before automaticly stopping. The program can be stopped manually by breaking in the CLI,
+most commonly using `CTRL + C`.
+
 ## TODO: Improvments
 - Using CMake will both increase compatability and allow for a clearer way of staticly including the `.cl` kernel code. Perhaps this will also allow for
 staticly including the machine binary in an elagent way.
