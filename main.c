@@ -279,7 +279,7 @@ softmax
                 block[i] = ' ';
         }
         block[CLICAP] = '\0';
-        printfu("%c[%s> Prediction: [ %s ]", chkset(sets, CS)? '\n' : '\r', block, classname);
+        printfu("%c[%s> Prediction: [ %s ]         ", chkset(sets, CS)? '\n' : '\r', block, classname);
         
         free(machineOutput->data);
         free(machineOutput);
