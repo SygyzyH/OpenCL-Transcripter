@@ -9,7 +9,7 @@
 #include <stdint.h>
 #include "pwave.h"
 
-#define NUM_BUF 4
+#define NUM_BUF 2
 #define SAMPLERATE 16000
 #define BITRATE 16
 extern int FRAMESPERSECOND;

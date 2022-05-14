@@ -41,7 +41,8 @@ dwParam1 - unused
 dwParam2 - unused
 */
 void CALLBACK whndl(HWAVEIN hwi, UINT uMsg, DWORD dwInstance, DWORD dwParam1, DWORD dwParam2) {
-    blocked = 0;
+    if (uMsg == WIM_DATA && header[aucurbuf].dwBytesRecorded == header[aucurbuf].dwBufferLength)
+        blocked = 0;
 }
 
 // Initialize things for winapi
@@ -64,7 +65,10 @@ int auinit() {
     
     // Buffer size for each buffer. Once this fills up (1 / FRAMESPERSECOND seconds)
     // the driver will trigger CALLBACK. 
-    size_t bpbuff = (BITRATE / 8) * SAMPLERATE / FRAMESPERSECOND;
+    size_t bpbuff = (size_t) (BITRATE / 8) * SAMPLERATE / FRAMESPERSECOND;
+    // Ensure bpbuff is devisable by byterate, otherwise a few bytes may be read
+    // out of the audio buffer
+    if (bpbuff % (BITRATE / 8) != 0) bpbuff += (BITRATE / 8) - bpbuff % (BITRATE / 8);
     // Init cyclical buffer
     pbuf = (char *) malloc(bpbuff * NUM_BUF);
     

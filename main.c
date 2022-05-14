@@ -11,6 +11,7 @@
 #include "std.h"
 
 #define MACHINEOUTPUTS 12
+#define RUNTIME_SECONDS 20
 
 int init();
 int cln();
@@ -185,7 +186,7 @@ softmax
     
     // Start timing
     t = clock();
-    double seconds = 10;
+    double seconds = RUNTIME_SECONDS;
     while (((double) (clock() - t)) / CLOCKS_PER_SEC < seconds) {
         WAVEHDR whdr = augetb();
         audioIn = frmtowav(formatex, (unsigned char *) whdr.lpData, (unsigned int) whdr.dwBufferLength);
