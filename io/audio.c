@@ -11,43 +11,24 @@ WAVEFORMATEX formatex;
 
 int aucurbuf = 0;
 int FRAMESPERSECOND = 20;
-char *classname = "";
 
 char *pbuf;
-int dlock = 1;
+int blocked = 0;
 int isauinit = 0;
 
 void CALLBACK whndl(HWAVEIN hwi, UINT uMsg, DWORD dwInstance, DWORD dwParam1, DWORD dwParam2);
 void prntbr();
 
-// Prints the bar at the bottom of the CLI
-void prntbr() {
-    // Short int min limit
-    short int max = -32768;
-    for (int i = 0; i < header[aucurbuf].dwBufferLength / BITRATE / 8; i++) {
-        short int cur = ((short int *)(header[aucurbuf].lpData))[i];
-        if (cur > max)
-            max = cur;
+// Computes the integrated loundness of the signal and returns the RMS in dB
+double computevu(double *signal, int sz) {
+    double sum = 0;
+    for (int i = 0; i < sz; i++) {
+        double t = signal[i];//20 * log10(signal[i] / max);
+        sum += t * t;//* t;
     }
     
-    double *dmaxa = (double *) malloc(sizeof(double) * 2);
-    dmaxa[0] = (double) CLICAP; dmaxa[1] = (double) max;
-    int e = amptodb(&dmaxa, 2, dmaxa[0], SCALE_FIRST);
-    
-    double dmax = dmaxa[1];
-    free(dmaxa);
-    
-    // Prepare string
-    char block[CLICAP + 1];
-    for (int i = 0; i < CLICAP; i++) {
-        if (i < (int) dmax)
-            block[i] = CLICHR;
-        else
-            block[i] = ' ';
-    }
-    block[CLICAP] = '\0';
-    
-    printfu("%c[%s> Prediction: [ %s ]    ", chkset(sets, CS) ? '\n' : '\r', block, classname);
+    double rms = sqrt(sum / sz);
+    return 10 * log10(rms);
 }
 
 // Callback function to handle emptying the buffer when its filled
@@ -60,29 +41,7 @@ dwParam1 - unused
 dwParam2 - unused
 */
 void CALLBACK whndl(HWAVEIN hwi, UINT uMsg, DWORD dwInstance, DWORD dwParam1, DWORD dwParam2) {
-    /*
-TODO: I was right all along. Like mentioned in the MSDN Docs,
-running another wave function in the CALLBACK handler causes
-dead lock. However, it happens even before it manages to
-catch the WIM_CLOSE message.
-
-What needs to be done is re-slotting the next buffer outside
-the CALLBACK function, say via a thread.
-https://stackoverflow.com/questions/11935486/waveinclose-reset-stop-no-msg
-
-A bandaid fix is to implement a mutex, however this mutex 
- might still be bypassed if the buffer fills up too quickly.
-*/
-    if (!dlock)
-        return;
-    
-    if (uMsg == WIM_DATA)
-        prntbr();
-    
-    if (chkset(sets, FB))
-        waveOutWrite(hWaveOut, &header[aucurbuf], sizeof(WAVEHDR));
-    if (++aucurbuf == NUM_BUF) aucurbuf = 0;
-    waveInAddBuffer(hWaveIn, &header[aucurbuf], sizeof(WAVEHDR));
+    blocked = 0;
 }
 
 // Initialize things for winapi
@@ -144,18 +103,25 @@ int austrt() {
     err += waveInStart(hWaveIn) != MMSYSERR_NOERROR;
     if (chkset(sets, DB))
         printf("%s: Device start %s\n", __FILE__, err? "UNSUCCESSFUL" : "successful");
+    blocked = 1;
     
     return err;
 }
 
-// Returns the current buffer 
+// Returns the current buffer
+// Blocks until the buffer is shuffled
 /* 
  returns WAVEHDR of the current buffer
 */
 WAVEHDR augetb() {
-    int i = aucurbuf - 1;
-    if (i < 0) i = NUM_BUF - 1;
-    return header[i];
+    WAVEHDR non;
+    if (!isauinit) return non;
+    while (blocked);
+    int returnindex = aucurbuf;
+    if (++aucurbuf == NUM_BUF) aucurbuf = 0;
+    waveInAddBuffer(hWaveIn, &header[aucurbuf], sizeof(WAVEHDR));
+    blocked = 1;
+    return header[returnindex];
 }
 
 // Cleanup winapi
@@ -163,15 +129,13 @@ WAVEHDR augetb() {
 returns 0 on success
 */
 int aucln() {
-    // TODO: There seems to be a problem here. After one run, buffer data is somehow corrupt (?)
     int err = 0;
+    while(blocked);
     
-    // TODO: Bandaid. See whndl
-    dlock = 0;
+    for (int i = 0; i < NUM_BUF; i++) err = waveInUnprepareHeader(hWaveIn, &header[i], sizeof(WAVEHDR));
     err += waveInStop(hWaveIn) != MMSYSERR_NOERROR;
     err += waveInReset(hWaveIn) != MMSYSERR_NOERROR;
     err += waveInClose(hWaveIn) != MMSYSERR_NOERROR;
-    for (int i = 0; i < NUM_BUF; i++) err += waveInUnprepareHeader(hWaveIn, &header[i], sizeof(WAVEHDR));
     
     if(chkset(sets, FB)) {
         err += waveOutReset(hWaveOut) != MMSYSERR_NOERROR;
