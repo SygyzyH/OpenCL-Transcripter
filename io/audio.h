@@ -9,15 +9,13 @@
 #include <stdint.h>
 #include "pwave.h"
 
-#define NUM_BUF 2
+#define NUM_BUF 4
 #define SAMPLERATE 16000
 #define BITRATE 16
-extern int FRAMESPERSECOND;
-#define CLICAP 30
-#define CLICHR '\xdb'
 
 #define UINT_BITRATE uint##BIRATE##_t
 
+extern int framespsec;
 extern WAVEFORMATEX formatex;
 
 int auinit();

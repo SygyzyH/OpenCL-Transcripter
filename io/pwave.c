@@ -133,7 +133,7 @@ WAVC* frmtowav(WAVEFORMATEX format, unsigned char *data, unsigned int dsize) {
         res->hdr.dchunkh[i] = "DATA"[i];
     res->hdr.dsize = dsize;
     
-    res->samples = (int) 8 * dsize / (res->hdr.channels * res->hdr.bitspsample);
+    res->samples = 8 * dsize / (res->hdr.channels * res->hdr.bitspsample);
     res->ssize = res->hdr.channels * res->hdr.bitspsample / 8;
     res->data = data;
     

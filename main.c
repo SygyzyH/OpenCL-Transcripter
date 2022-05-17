@@ -12,6 +12,8 @@
 
 #define MACHINEOUTPUTS 12
 #define RUNTIME_SECONDS 20
+#define CLICAP 30
+#define CLICHR '\xdb'
 
 int init();
 int cln();
@@ -142,7 +144,7 @@ softmax
     t = clock() - t;
     double time = ((double) t) / CLOCKS_PER_SEC;
     int classrate = (int) (0.8 * 1 / time);
-    FRAMESPERSECOND = classrate;
+    framespsec = classrate;
     if (chkset(sets, DB))
         printf("Benchmark finished, round-about time: %lf seconds, allowing for classification rate of ~%d.\n",
                time, classrate);

@@ -10,7 +10,7 @@ WAVEHDR header [NUM_BUF];
 WAVEFORMATEX formatex;
 
 int aucurbuf = 0;
-int FRAMESPERSECOND = 20;
+int framespsec = 20;
 
 char *pbuf;
 int blocked = 0;
@@ -53,19 +53,17 @@ int auinit() {
     int err = 0;
     
     // Init wave format
-    WAVEFORMATEX format;
-    format.wFormatTag = WAVE_FORMAT_PCM;
-    format.nChannels = 1;
-    format.nSamplesPerSec = SAMPLERATE;
-    format.wBitsPerSample = BITRATE;
-    format.nBlockAlign = format.nChannels * format.wBitsPerSample / 8;
-    format.nAvgBytesPerSec = format.nSamplesPerSec * format.nChannels * format.wBitsPerSample / 8;
-    format.cbSize = 0;
-    formatex = format;
+    formatex.wFormatTag = WAVE_FORMAT_PCM;
+    formatex.nChannels = 1;
+    formatex.nSamplesPerSec = SAMPLERATE;
+    formatex.wBitsPerSample = BITRATE;
+    formatex.nBlockAlign = formatex.nChannels * formatex.wBitsPerSample / 8;
+    formatex.nAvgBytesPerSec = formatex.nSamplesPerSec * formatex.nChannels * formatex.wBitsPerSample / 8;
+    formatex.cbSize = 0;
     
-    // Buffer size for each buffer. Once this fills up (1 / FRAMESPERSECOND seconds)
+    // Buffer size for each buffer. Once this fills up (1 / framespsec seconds)
     // the driver will trigger CALLBACK. 
-    size_t bpbuff = (size_t) (BITRATE / 8) * SAMPLERATE / FRAMESPERSECOND;
+    size_t bpbuff = (size_t) (BITRATE / 8) * SAMPLERATE / framespsec;
     // Ensure bpbuff is devisable by byterate, otherwise a few bytes may be read
     // out of the audio buffer
     if (bpbuff % (BITRATE / 8) != 0) bpbuff += (BITRATE / 8) - bpbuff % (BITRATE / 8);
@@ -73,9 +71,9 @@ int auinit() {
     pbuf = (char *) malloc(bpbuff * NUM_BUF);
     
     // Open devices
-    err += waveInOpen(&hWaveIn, WAVE_MAPPER, &format, (DWORD_PTR) whndl, 0, CALLBACK_FUNCTION | WAVE_FORMAT_DIRECT) != MMSYSERR_NOERROR;
+    err += waveInOpen(&hWaveIn, WAVE_MAPPER, &formatex, (DWORD_PTR) whndl, 0, CALLBACK_FUNCTION | WAVE_FORMAT_DIRECT) != MMSYSERR_NOERROR;
     if (chkset(sets, FB))
-        err += waveOutOpen(&hWaveOut, WAVE_MAPPER, &format, (DWORD_PTR) NULL, 0, WAVE_FORMAT_DIRECT) != MMSYSERR_NOERROR;
+        err += waveOutOpen(&hWaveOut, WAVE_MAPPER, &formatex, (DWORD_PTR) NULL, 0, WAVE_FORMAT_DIRECT) != MMSYSERR_NOERROR;
     
     // Init headers
     for (int i = 0; i < NUM_BUF; i++) {
